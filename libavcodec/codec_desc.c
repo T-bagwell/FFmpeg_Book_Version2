@@ -229,6 +229,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .profiles  = NULL_IF_CONFIG_SMALL(ff_h264_profiles),
     },
     {
+        .id        = AV_CODEC_ID_BOOK,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "libbook",
+        .long_name = NULL_IF_CONFIG_SMALL("BOOK Codec"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
         .id        = AV_CODEC_ID_INDEO3,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "indeo3",

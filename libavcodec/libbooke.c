@@ -86,7 +86,6 @@ const FFCodec ff_libbooke_encoder = {
     .p.priv_class     = &class,
     .defaults       = libbook_defaults,
     .p.pix_fmts       = libbook_pix_fmts,
-    .p.capabilities   = 0,
-    .caps_internal  = 0,
-    .p.wrapper_name   = "libbook",
+    .p.capabilities   = AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
