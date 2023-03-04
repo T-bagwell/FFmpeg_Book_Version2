@@ -512,6 +512,8 @@ extern const AVInputFormat  ff_xwma_demuxer;
 extern const AVInputFormat  ff_yop_demuxer;
 extern const AVInputFormat  ff_yuv4mpegpipe_demuxer;
 extern const FFOutputFormat ff_yuv4mpegpipe_muxer;
+extern const FFOutputFormat ff_book_muxer;
+extern const AVInputFormat  ff_book_demuxer;
 /* image demuxers */
 extern const AVInputFormat  ff_image_bmp_pipe_demuxer;
 extern const AVInputFormat  ff_image_cri_pipe_demuxer;
