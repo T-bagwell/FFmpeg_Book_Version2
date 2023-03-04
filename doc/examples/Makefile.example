@@ -26,6 +26,8 @@ EXAMPLES=\
                 decode_filter_video                \
                 decode_video                       \
                 demux_decode                       \
+                avframe_demo                       \
+                avbuffer_demo                      \
                 encode_audio                       \
                 encode_video                       \
                 extract_mvs                        \

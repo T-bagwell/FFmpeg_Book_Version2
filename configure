@@ -1734,6 +1734,8 @@ EXAMPLE_LIST="
     vaapi_encode_example
     vaapi_transcode_example
     qsv_transcode_example
+    avframe_demo_example
+    avbuffer_demo_example
 "
 
 EXTERNAL_AUTODETECT_LIBRARY_LIST="
@@ -3783,6 +3785,8 @@ xstack_qsv_filter_select="qsvvpp"
 avio_http_serve_files_deps="avformat avutil fork"
 avio_list_dir_deps="avformat avutil"
 avio_read_callback_deps="avformat avcodec avutil"
+avframe_demo="avcodec avformat avutil swscale"
+avbuffer_demo="avcodec avformat avutil swscale"
 decode_audio_example_deps="avcodec avutil"
 decode_filter_audio_example_deps="avfilter avcodec avformat avutil"
 decode_filter_video_example_deps="avfilter avcodec avformat avutil"

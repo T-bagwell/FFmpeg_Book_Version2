@@ -22,6 +22,8 @@ EXAMPLES-$(CONFIG_TRANSCODE_EXAMPLE)         += transcode
 EXAMPLES-$(CONFIG_VAAPI_ENCODE_EXAMPLE)      += vaapi_encode
 EXAMPLES-$(CONFIG_VAAPI_TRANSCODE_EXAMPLE)   += vaapi_transcode
 EXAMPLES-$(CONFIG_QSV_TRANSCODE_EXAMPLE)     += qsv_transcode
+EXAMPLES-$(CONFIG_AVFRAME_DEMO_EXAMPLE)      += avframe_demo
+EXAMPLES-$(CONFIG_AVBUFFER_DEMO_EXAMPLE)     += avbuffer_demo
 
 EXAMPLES       := $(EXAMPLES-yes:%=doc/examples/%$(PROGSSUF)$(EXESUF))
 EXAMPLES_G     := $(EXAMPLES-yes:%=doc/examples/%$(PROGSSUF)_g$(EXESUF))
