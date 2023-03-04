@@ -429,6 +429,8 @@ OBJS-$(CONFIG_HEVC_DECODER)            += hevcdec.o hevc_mvs.o \
                                           hevcdsp.o hevc_filter.o hevc_data.o \
                                           h274.o
 OBJS-$(CONFIG_HEVC_AMF_ENCODER)        += amfenc_hevc.o
+OBJS-$(CONFIG_LIBBOOKD_DECODER)       += libbookd.o
+OBJS-$(CONFIG_LIBBOOKE_ENCODER)       += libbooke.o
 OBJS-$(CONFIG_HEVC_CUVID_DECODER)      += cuviddec.o
 OBJS-$(CONFIG_HEVC_MEDIACODEC_DECODER) += mediacodecdec.o
 OBJS-$(CONFIG_HEVC_MEDIACODEC_ENCODER) += mediacodecenc.o
