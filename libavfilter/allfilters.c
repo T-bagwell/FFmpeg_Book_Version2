@@ -192,6 +192,7 @@ extern const AVFilter ff_vf_blend_vulkan;
 extern const AVFilter ff_vf_blockdetect;
 extern const AVFilter ff_vf_blurdetect;
 extern const AVFilter ff_vf_bm3d;
+extern const AVFilter ff_vf_book;
 extern const AVFilter ff_vf_boxblur;
 extern const AVFilter ff_vf_boxblur_opencl;
 extern const AVFilter ff_vf_bwdif;
