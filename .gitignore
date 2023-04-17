@@ -42,3 +42,8 @@
 /mapfile
 /tools/python/__pycache__/
 doc/examples/014/ffmpeg-simple-player/third-party/
+doc/examples/014/ffmpeg-simple-player/thirdparty/
+doc/examples/014/ffmpeg-simple-player/build/visual studio/x64/
+doc/examples/014/ffmpeg-simple-player/build/visual studio/Release/
+doc/examples/014/ffmpeg-simple-player/build/visual studio/Debug/
+doc/examples/014/ffmpeg-simple-player/build/visual studio/.vs/
