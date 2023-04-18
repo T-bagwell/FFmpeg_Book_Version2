@@ -42,8 +42,13 @@ static void FN_DecodeImage_Cb(unsigned char* data, int w, int h, void *userdata)
     cbData->view->updateTexture(cbData->item, data, h);
 }
 
-int main(int /*argc*/, char **/*argv*/)
+int main(int argc, char **argv)
 {
+    if (argc < 2) {
+        ff_log_line("usage: %s media_file_path", "./ffmpeg-simple-player");
+        return -1;
+    }
+
     SDLApp a;
 
     // render video
@@ -58,7 +63,7 @@ int main(int /*argc*/, char **/*argv*/)
     cbData->view = &view;
 
     FFmpegPlayer player;
-    player.setFilePath("E:/temp/daxiongtu.mp4");
+    player.setFilePath(argv[1]);
     player.setImageCb(FN_DecodeImage_Cb, cbData);
     if (player.initPlayer() != 0) {
         return -1;
