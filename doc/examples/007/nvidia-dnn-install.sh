@@ -75,7 +75,7 @@ echo_log 2 "CUDNN  version $CUDNN_MAJOR.$CUDNN_MINOR"
 echo "/usr/local/cudnn-11.2-8.1.1.33/cuda/lib64" >> /etc/ld.so.conf
 echo
 
-echo_log 2 "###### 4、载安装 TensorFlow ######"
+echo_log 2 "###### 4、下载安装 TensorFlow ######"
 #必须GPU版本C语言库
 wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.6.0.tar.gz
 tar -xzf libtensorflow-gpu-linux-x86_64-2.6.0.tar.gz -C /usr/local
