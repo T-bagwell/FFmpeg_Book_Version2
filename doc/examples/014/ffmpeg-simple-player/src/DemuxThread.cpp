@@ -18,7 +18,7 @@ void DemuxThread::setPlayerCtx(FFmpegPlayerCtx *ctx)
 int DemuxThread::initDemuxThread()
 {
     AVFormatContext *formatCtx = NULL;
-    if (avformat_open_input(&formatCtx, is->filename, NULL, NULL) != 0) {
+    if (avformat_open_input(&formatCtx, is->filename.data(), NULL, NULL) != 0) {
         ff_log_line("avformat_open_input Failed.");
         return -1;
     }
@@ -30,7 +30,7 @@ int DemuxThread::initDemuxThread()
         return -1;
     }
 
-    av_dump_format(formatCtx, 0, is->filename, 0);
+    av_dump_format(formatCtx, 0, is->filename.data(), 0);
 
     if (stream_open(is, AVMEDIA_TYPE_AUDIO) < 0) {
         ff_log_line("open audio stream Failed.");
@@ -104,7 +104,7 @@ int DemuxThread::decode_loop()
             }
 
             if (av_seek_frame(is->formatCtx, stream_index, seek_target, is->seek_flags) < 0) {
-                ff_log_line("%s: error while seeking\n", is->filename);
+                ff_log_line("%s: error while seeking\n", is->filename.data());
             } else {
                 if(is->audioStream >= 0) {
                     is->audioq.packetFlush();

@@ -100,7 +100,7 @@ struct FFmpegPlayerCtx {
     SDL_mutex       *pictq_mutex = nullptr;
     SDL_cond        *pictq_cond = nullptr;
 
-    char            filename[1024];
+    std::string     filename;
 
     SwsContext      *sws_ctx = nullptr;
     SwrContext      *swr_ctx = nullptr;
