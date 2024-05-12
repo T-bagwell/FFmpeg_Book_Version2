@@ -206,7 +206,7 @@ int DemuxThread::stream_open(FFmpegPlayerCtx *is, int media_type)
                     codecCtx->pix_fmt,
                     codecCtx->width,
                     codecCtx->height,
-                    AV_PIX_FMT_RGB24,
+                    AV_PIX_FMT_YUV420P,
                     SWS_BILINEAR,
                     NULL,
                     NULL,
