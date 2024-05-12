@@ -33,8 +33,6 @@ public:
 
     void onRefresh();
 
-    void setVideoPicture(AVFrame *frame);
-
 private:
     SDL_Window* m_sdlWindow = nullptr;
     SDL_Renderer* m_sdlRender = nullptr;

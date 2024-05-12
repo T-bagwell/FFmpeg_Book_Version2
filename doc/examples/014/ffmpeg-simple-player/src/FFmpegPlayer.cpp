@@ -89,7 +89,7 @@ int FFmpegPlayer::initPlayer()
 {
     // init ctx
     playerCtx.init();
-    //strncpy(playerCtx.filename, m_filePath.c_str(), m_filePath.size());
+
 
     // create demux thread
     m_demuxThread = new DemuxThread;
