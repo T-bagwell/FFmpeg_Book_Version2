@@ -32,11 +32,11 @@ struct RenderPairData
     RenderView *view = nullptr;
 };
 
-static void FN_DecodeImage_Cb(unsigned char* data, int w, int h, void *userdata)
+static void FN_DecodeImage_Cb(void *data, int w, int h, void *userdata)
 {
     RenderPairData *cbData = (RenderPairData*)userdata;
     if (!cbData->item) {
-        cbData->item = cbData->view->createRGB24Texture(w, h);
+        cbData->item = cbData->view->createYUV420PTexture(w, h);
     }
 
     cbData->view->updateTexture(cbData->item, data, h);

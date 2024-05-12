@@ -4,6 +4,7 @@
 #include <SDL.h>
 #include <list>
 #include <mutex>
+#include <libavcodec/avcodec.h>
 
 using namespace std;
 
@@ -23,10 +24,16 @@ public:
 
     int initSDL();
 
+    /* this method is deprecated */
     RenderItem* createRGB24Texture(int w, int h);
-    void updateTexture(RenderItem*item, unsigned char *pixelData, int rows);
+
+    RenderItem* createYUV420PTexture(int w, int h);
+
+    void updateTexture(RenderItem*item, void *pixelData, int rows);
 
     void onRefresh();
+
+    void setVideoPicture(AVFrame *frame);
 
 private:
     SDL_Window* m_sdlWindow = nullptr;

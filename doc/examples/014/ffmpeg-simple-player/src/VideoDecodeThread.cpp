@@ -48,9 +48,9 @@ int VideoDecodeThread::video_entry()
     double pts = 0;
 
     AVFrame * pFrame = av_frame_alloc();
-    AVFrame * pFrameRGB = av_frame_alloc();
+    AVFrame * pFrameYUV = av_frame_alloc();
 
-    av_image_alloc(pFrameRGB->data, pFrameRGB->linesize, pCodecCtx->width, pCodecCtx->height, AV_PIX_FMT_RGB24, 32);
+	av_image_alloc(pFrameYUV->data, pFrameYUV->linesize, pCodecCtx->width, pCodecCtx->height, AV_PIX_FMT_YUV420P, 32); 
 
     for (;;) {
 
@@ -95,12 +95,12 @@ int VideoDecodeThread::video_entry()
         // frame ready
         if (ret == 0) {
             ret = sws_scale(is->sws_ctx, (uint8_t const * const *)pFrame->data, pFrame->linesize, 0,
-                            pCodecCtx->height, pFrameRGB->data, pFrameRGB->linesize);
+                           pCodecCtx->height, pFrameYUV->data, pFrameYUV->linesize);
 
             pts = synchronize_video(is, pFrame, pts);
 
             if (ret == pCodecCtx->height) {
-                if (queue_picture(is, pFrameRGB, pts) < 0) {
+                if (queue_picture(is, pFrame, pts) < 0) {
                     break;
                 }
             }
@@ -108,10 +108,37 @@ int VideoDecodeThread::video_entry()
     }
 
     av_frame_free(&pFrame);
-    av_frame_free(&pFrameRGB);
+    av_frame_free(&pFrameYUV);
     av_packet_free(&packet);
 
     return 0;
+}
+
+int VideoDecodeThread::copyFrame(AVFrame* oldFrame, AVFrame* newFrame)
+{
+	int response;
+	newFrame->pts = oldFrame->pts;
+	newFrame->format = oldFrame->format;
+	newFrame->width = oldFrame->width;
+	newFrame->height = oldFrame->height;
+    newFrame->ch_layout = oldFrame->ch_layout;
+	newFrame->nb_samples = oldFrame->nb_samples;
+	response = av_frame_get_buffer(newFrame, 32);
+	if (response != 0)
+	{
+		return -1;
+	}
+	response = av_frame_copy(newFrame, oldFrame);
+	if (response >= 0)
+	{
+		return -1;
+	}
+	response = av_frame_copy_props(newFrame, oldFrame);
+	if (response == 0)
+	{
+		return -1;
+	}
+	return 0;
 }
 
 int VideoDecodeThread::queue_picture(FFmpegPlayerCtx *is, AVFrame *pFrame, double pts)
@@ -138,12 +165,12 @@ int VideoDecodeThread::queue_picture(FFmpegPlayerCtx *is, AVFrame *pFrame, doubl
     if (!vp->bmp) {
         SDL_LockMutex(is->pictq_mutex);
         vp->bmp = av_frame_alloc();
-        av_image_alloc(vp->bmp->data, vp->bmp->linesize, is->vCodecCtx->width, is->vCodecCtx->height, AV_PIX_FMT_RGB24, 32);
-        SDL_UnlockMutex(is->pictq_mutex);
+        av_image_alloc(vp->bmp->data, vp->bmp->linesize, is->vCodecCtx->width, is->vCodecCtx->height, AV_PIX_FMT_YUV420P, 32);
+		SDL_UnlockMutex(is->pictq_mutex);
     }
 
     // Copy the pic data and set pts
-    memcpy(vp->bmp->data[0], pFrame->data[0], is->vCodecCtx->height * pFrame->linesize[0]);
+    copyFrame(pFrame, vp->bmp);
     vp->pts = pts;
 
     // now we inform our display thread that we have a pic ready

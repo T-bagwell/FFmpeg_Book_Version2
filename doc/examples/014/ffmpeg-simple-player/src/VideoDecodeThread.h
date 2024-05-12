@@ -15,6 +15,8 @@ public:
 
     void run();
 
+    int copyFrame(AVFrame* oldFrame, AVFrame* newFrame);
+
 private:
     int video_entry();
     int queue_picture(FFmpegPlayerCtx *is, AVFrame *pFrame, double pts);

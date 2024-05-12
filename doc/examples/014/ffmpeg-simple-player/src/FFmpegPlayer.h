@@ -40,7 +40,7 @@ extern "C" {
 
 #define SDL_AUDIO_BUFFER_SIZE (1024)
 
-typedef void (*Image_Cb)(unsigned char* data, int w, int h, void *userdata);
+typedef void (*Image_Cb)(void *data, int w, int h, void *userdata);
 
 struct VideoPicture {
     AVFrame  *bmp = nullptr;
@@ -53,6 +53,8 @@ enum PauseState {
 };
 
 struct FFmpegPlayerCtx {
+
+    AVFrame *frame = nullptr;
 
     AVFormatContext *formatCtx = nullptr;
 
@@ -100,7 +102,7 @@ struct FFmpegPlayerCtx {
     SDL_mutex       *pictq_mutex = nullptr;
     SDL_cond        *pictq_cond = nullptr;
 
-    char            filename[1024];
+    const char      *filename;
 
     SwsContext      *sws_ctx = nullptr;
     SwrContext      *swr_ctx = nullptr;

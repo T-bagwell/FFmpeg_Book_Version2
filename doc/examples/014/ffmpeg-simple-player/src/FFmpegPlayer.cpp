@@ -49,7 +49,7 @@ static void video_display(FFmpegPlayerCtx *is)
 {
     VideoPicture *vp =  &is->pictq[is->pictq_rindex];
     if (vp->bmp && is->imgCb) {
-        is->imgCb(vp->bmp->data[0], is->vCodecCtx->width, is->vCodecCtx->height, is->cbData);
+        is->imgCb(vp->bmp, is->vCodecCtx->width, is->vCodecCtx->height, is->cbData);
     }
 }
 
@@ -75,7 +75,8 @@ FFmpegPlayer::FFmpegPlayer()
 
 void FFmpegPlayer::setFilePath(const char *filePath)
 {
-    m_filePath = filePath;
+    /* to fix the file path copy error */
+    playerCtx.filename = filePath;
 }
 
 void FFmpegPlayer::setImageCb(Image_Cb cb, void *userData)
@@ -88,7 +89,7 @@ int FFmpegPlayer::initPlayer()
 {
     // init ctx
     playerCtx.init();
-    strncpy(playerCtx.filename, m_filePath.c_str(), m_filePath.size());
+    //strncpy(playerCtx.filename, m_filePath.c_str(), m_filePath.size());
 
     // create demux thread
     m_demuxThread = new DemuxThread;

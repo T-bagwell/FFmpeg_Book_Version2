@@ -71,15 +71,37 @@ RenderItem *RenderView::createRGB24Texture(int w, int h)
     return ret;
 }
 
-void RenderView::updateTexture(RenderItem *item, unsigned char *pixelData, int rows)
+RenderItem *RenderView::createYUV420PTexture(int w, int h)
 {
     m_updateMutex.lock();
 
+    RenderItem *ret = new RenderItem;
+    SDL_Texture *tex = SDL_CreateTexture(m_sdlRender, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, w, h);
+    ret->texture = tex;
+    ret->srcRect = makeRect(0, 0, w, h);
+    ret->dstRect = makeRect(0, 0, SDL_WINDOW_DEFAULT_WIDTH, SDL_WINDOW_DEFAULT_HEIGHT);
+
+    m_items.push_back(ret);
+
+    m_updateMutex.unlock();
+
+    return ret;
+}
+
+void RenderView::updateTexture(RenderItem *item, void *pixelData, int rows)
+{
+    m_updateMutex.lock();
+
+    AVFrame *frame = (AVFrame *)pixelData;
     void *pixels = nullptr;
-    int pitch;
-    SDL_LockTexture(item->texture, NULL, &pixels, &pitch);
-    memcpy(pixels, pixelData, pitch * rows);
-    SDL_UnlockTexture(item->texture);
+    int pitch; 
+    // YUV420P 
+    SDL_UpdateYUVTexture(item->texture, NULL,
+                         frame->data[0], frame->linesize[0],
+                         frame->data[1], frame->linesize[1],
+                         frame->data[2], frame->linesize[2]);
+
+
 
     std::list<RenderItem *>::iterator iter;
     SDL_RenderClear(m_sdlRender);
