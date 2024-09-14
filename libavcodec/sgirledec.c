@@ -123,9 +123,6 @@ static int sgirle_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    frame->pict_type = AV_PICTURE_TYPE_I;
-    frame->key_frame = 1;
-
     *got_frame = 1;
 
     return avpkt->size;

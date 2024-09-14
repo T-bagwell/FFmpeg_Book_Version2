@@ -23,7 +23,7 @@
 #include "libavutil/samplefmt.h"
 #include "avfilter.h"
 #include "audio.h"
-#include "internal.h"
+#include "filters.h"
 
 typedef struct CompensationDelayContext {
     const AVClass *class;
@@ -166,13 +166,6 @@ static const AVFilterPad compensationdelay_inputs[] = {
     },
 };
 
-static const AVFilterPad compensationdelay_outputs[] = {
-    {
-        .name = "default",
-        .type = AVMEDIA_TYPE_AUDIO,
-    },
-};
-
 const AVFilter ff_af_compensationdelay = {
     .name          = "compensationdelay",
     .description   = NULL_IF_CONFIG_SMALL("Audio Compensation Delay Line."),
@@ -180,7 +173,7 @@ const AVFilter ff_af_compensationdelay = {
     .priv_class    = &compensationdelay_class,
     .uninit        = uninit,
     FILTER_INPUTS(compensationdelay_inputs),
-    FILTER_OUTPUTS(compensationdelay_outputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,

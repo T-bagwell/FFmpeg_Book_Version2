@@ -863,8 +863,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *pic,
     if (ret)
         return ret;
 
-    pic->pict_type = AV_PICTURE_TYPE_I;
-    pic->key_frame = 1;
     *got_frame = 1;
 
     return avpkt->size;

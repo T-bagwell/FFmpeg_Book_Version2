@@ -21,7 +21,7 @@
 #include "libavutil/imgutils.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
+#include "video.h"
 
 typedef struct RepeatFieldsContext {
     const AVClass *class;
@@ -68,7 +68,9 @@ static int config_input(AVFilterLink *inlink)
 
 static void update_pts(AVFilterLink *link, AVFrame *f, int64_t pts, int fields)
 {
-    if (av_cmp_q(link->frame_rate, (AVRational){30000, 1001}) == 0 &&
+    FilterLink *l = ff_filter_link(link);
+
+    if (av_cmp_q(l->frame_rate, (AVRational){30000, 1001}) == 0 &&
          av_cmp_q(link->time_base, (AVRational){1001, 60000}) <= 0
     ) {
         f->pts = pts + av_rescale_q(fields, (AVRational){1001, 60000}, link->time_base);
@@ -93,11 +95,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->frame->pts = AV_NOPTS_VALUE;
     }
 
-    if ((state == 0 && !in->top_field_first) ||
-        (state == 1 &&  in->top_field_first)) {
+    if ((state == 0 && !(in->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST)) ||
+        (state == 1 &&  (in->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST))) {
         av_log(ctx, AV_LOG_WARNING, "Unexpected field flags: "
                                     "state=%d top_field_first=%d repeat_first_field=%d\n",
-                                    state, in->top_field_first, in->repeat_pict);
+                                    state, !!(in->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST),
+                                    in->repeat_pict);
         state ^= 1;
     }
 
@@ -181,19 +184,12 @@ static const AVFilterPad repeatfields_inputs[] = {
     },
 };
 
-static const AVFilterPad repeatfields_outputs[] = {
-    {
-        .name = "default",
-        .type = AVMEDIA_TYPE_VIDEO,
-    },
-};
-
 const AVFilter ff_vf_repeatfields = {
     .name          = "repeatfields",
     .description   = NULL_IF_CONFIG_SMALL("Hard repeat fields based on MPEG repeat field flag."),
     .priv_size     = sizeof(RepeatFieldsContext),
     .uninit        = uninit,
     FILTER_INPUTS(repeatfields_inputs),
-    FILTER_OUTPUTS(repeatfields_outputs),
+    FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts_eq),
 };

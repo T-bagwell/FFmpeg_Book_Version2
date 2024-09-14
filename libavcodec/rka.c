@@ -21,6 +21,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
@@ -59,8 +60,8 @@ typedef struct AdaptiveModel {
 } AdaptiveModel;
 
 typedef struct ChContext {
-    int cmode;
-    int cmode2;
+    int qfactor;
+    int vrq;
     int last_nb_decoded;
     unsigned srate_pad;
     unsigned pos_idx;
@@ -131,7 +132,7 @@ static void adaptive_model_free(AdaptiveModel *am)
 static av_cold int rka_decode_init(AVCodecContext *avctx)
 {
     RKAContext *s = avctx->priv_data;
-    int cmode;
+    int qfactor;
 
     if (avctx->extradata_size < 16)
         return AVERROR_INVALIDDATA;
@@ -160,14 +161,18 @@ static av_cold int rka_decode_init(AVCodecContext *avctx)
     s->last_nb_samples = s->total_nb_samples % s->frame_samples;
     s->correlated = avctx->extradata[15] & 1;
 
-    cmode = avctx->extradata[14] & 0xf;
+    qfactor = avctx->extradata[14] & 0xf;
     if ((avctx->extradata[15] & 4) != 0)
-        cmode = -cmode;
+        qfactor = -qfactor;
 
-    s->ch[0].cmode = s->ch[1].cmode = cmode < 0 ? 2 : cmode;
-    s->ch[0].cmode2 = cmode < 0 ? FFABS(cmode) : 0;
-    s->ch[1].cmode2 = cmode < 0 ? FFABS(cmode) : 0;
-    av_log(avctx, AV_LOG_DEBUG, "cmode: %d\n", cmode);
+    s->ch[0].qfactor = s->ch[1].qfactor = qfactor < 0 ? 2 : qfactor;
+    s->ch[0].vrq = qfactor < 0 ? -qfactor : 0;
+    s->ch[1].vrq = qfactor < 0 ? -qfactor : 0;
+    if (qfactor < 0) {
+        s->ch[0].vrq = av_clip(s->ch[0].vrq, 1, 8);
+        s->ch[1].vrq = av_clip(s->ch[1].vrq, 1, 8);
+    }
+    av_log(avctx, AV_LOG_DEBUG, "qfactor: %d\n", qfactor);
 
     return 0;
 }
@@ -207,7 +212,7 @@ static int chctx_init(RKAContext *s, ChContext *c,
     c->bprob[0] = s->bprob[0];
     c->bprob[1] = s->bprob[1];
 
-    c->srate_pad = (sample_rate << 13) / 44100 & 0xFFFFFFFCU;
+    c->srate_pad = ((int64_t)sample_rate << 13) / 44100 & 0xFFFFFFFCU;
     c->pos_idx = 1;
 
     for (int i = 0; i < FF_ARRAY_ELEMS(s->bprob[0]); i++)
@@ -665,18 +670,16 @@ static int mdl64_decode(ACoder *ac, Model64 *ctx, int *dst)
     return 0;
 }
 
-static const uint8_t tab[16] = {
-    0, 3, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
-};
+static const uint8_t vrq_qfactors[8] = { 3, 3, 2, 2, 1, 1, 1, 1 };
 
 static int decode_filter(RKAContext *s, ChContext *ctx, ACoder *ac, int off, unsigned size)
 {
     FiltCoeffs filt;
     Model64 *mdl64;
-    int m = 0, split, val, last_val = 0, ret;
-    unsigned idx = 3, bits = 0;
+    int split, val, last_val = 0, ret;
+    unsigned rsize, idx = 3, bits = 0, m = 0;
 
-    if (ctx->cmode == 0) {
+    if (ctx->qfactor == 0) {
         if (amdl_decode_int(&ctx->fshift, ac, &bits, 15) < 0)
             return -1;
         bits &= 31U;
@@ -698,10 +701,12 @@ static int decode_filter(RKAContext *s, ChContext *ctx, ACoder *ac, int off, uns
         if (amdl_decode_int(&ctx->position, ac, &idx, 10) < 0)
             return -1;
 
+        m = 0;
         idx = (ctx->pos_idx + idx) % 11;
         ctx->pos_idx = idx;
 
-        for (int y = 0; y < FFMIN(split, size - x); y++, off++) {
+        rsize = FFMIN(split, size - x);
+        for (int y = 0; y < rsize; y++, off++) {
             int midx, shift = idx, *src, sum = 16;
 
             if (off >= FF_ARRAY_ELEMS(ctx->buf0))
@@ -728,32 +733,32 @@ static int decode_filter(RKAContext *s, ChContext *ctx, ACoder *ac, int off, uns
             for (int i = 15; i < filt.size; i++)
                 sum += filt.coeffs[i] * (unsigned)src[-i];
             sum = sum >> 6;
-            if (ctx->cmode == 0) {
+            if (ctx->qfactor == 0) {
                 if (bits == 0) {
                     ctx->buf1[off] = sum + val;
                 } else {
-                    ctx->buf1[off] = (val + (sum >> bits)) * (1 << bits) +
+                    ctx->buf1[off] = (val + (sum >> bits)) * (1U << bits) +
                         (((1U << bits) - 1U) & ctx->buf1[off + -1]);
                 }
-                ctx->buf0[off] = ctx->buf1[off] + ctx->buf0[off + -1];
+                ctx->buf0[off] = ctx->buf1[off] + (unsigned)ctx->buf0[off + -1];
             } else {
-                val *= 1 << ctx->cmode;
-                sum += ctx->buf0[off + -1] + val;
+                val *= 1U << ctx->qfactor;
+                sum += ctx->buf0[off + -1] + (unsigned)val;
                 switch (s->bps) {
                 case 16: sum = av_clip_int16(sum); break;
                 case  8: sum = av_clip_int8(sum);  break;
                 }
                 ctx->buf1[off] = sum - ctx->buf0[off + -1];
                 ctx->buf0[off] = sum;
-                m += FFABS(ctx->buf1[off]);
+                m += (unsigned)FFABS(ctx->buf1[off]);
             }
         }
-        if (ctx->cmode2 != 0) {
+        if (ctx->vrq != 0) {
             int sum = 0;
-            for (int i = (m << 6) / split; i > 0; i = i >> 1)
+            for (unsigned i = (m << 6) / rsize; i > 0; i = i >> 1)
                 sum++;
-            sum = sum - (ctx->cmode2 + 7);
-            ctx->cmode = FFMAX(sum, tab[ctx->cmode2]);
+            sum -= (ctx->vrq + 7);
+            ctx->qfactor = FFMAX(sum, vrq_qfactors[ctx->vrq - 1]);
         }
 
         x += split;
@@ -948,6 +953,10 @@ static int rka_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             n += ret;
         }
     }
+
+    if (frame->nb_samples < s->frame_samples &&
+        frame->nb_samples > s->last_nb_samples)
+        frame->nb_samples = s->last_nb_samples;
 
     *got_frame_ptr = 1;
 

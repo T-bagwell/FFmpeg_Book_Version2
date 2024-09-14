@@ -26,6 +26,7 @@
  */
 
 #include "libavutil/common.h"
+#include "libavutil/mem.h"
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
@@ -339,7 +340,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     if ((ret = ff_reget_buffer(avctx, c->pic, 0)) < 0)
         return ret;
 
-    c->pic->key_frame = 0;
+    c->pic->flags &= ~AV_FRAME_FLAG_KEY;
     c->pic->pict_type = AV_PICTURE_TYPE_P;
 
     // restore screen after cursor
@@ -441,7 +442,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             bytestream2_skip(gb, 4);
             break;
         case MAGIC_WMVi: // ServerInitialization struct
-            c->pic->key_frame = 1;
+            c->pic->flags |= AV_FRAME_FLAG_KEY;
             c->pic->pict_type = AV_PICTURE_TYPE_I;
             depth = bytestream2_get_byte(gb);
             if (depth != c->bpp) {

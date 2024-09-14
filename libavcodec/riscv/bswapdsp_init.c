@@ -26,21 +26,29 @@
 #include "libavcodec/bswapdsp.h"
 
 void ff_bswap32_buf_rvb(uint32_t *dst, const uint32_t *src, int len);
-void ff_bswap32_buf_rvv(uint32_t *dst, const uint32_t *src, int len);
 void ff_bswap16_buf_rvv(uint16_t *dst, const uint16_t *src, int len);
+void ff_bswap32_buf_rvvb(uint32_t *dst, const uint32_t *src, int len);
+void ff_bswap16_buf_rvvb(uint16_t *dst, const uint16_t *src, int len);
 
 av_cold void ff_bswapdsp_init_riscv(BswapDSPContext *c)
 {
-    int cpu_flags = av_get_cpu_flags();
+#if HAVE_RV
+    int flags = av_get_cpu_flags();
 
 #if (__riscv_xlen >= 64)
-    if (cpu_flags & AV_CPU_FLAG_RVB_BASIC)
+    if (flags & AV_CPU_FLAG_RVB_BASIC)
         c->bswap_buf = ff_bswap32_buf_rvb;
 #endif
 #if HAVE_RVV
-    if (cpu_flags & AV_CPU_FLAG_RVV_I32) {
-        c->bswap_buf = ff_bswap32_buf_rvv;
+    if ((flags & AV_CPU_FLAG_RVV_I32) && (flags & AV_CPU_FLAG_RVB)) {
         c->bswap16_buf = ff_bswap16_buf_rvv;
+#if HAVE_RV_ZVBB
+        if (flags & AV_CPU_FLAG_RV_ZVBB) {
+            c->bswap_buf = ff_bswap32_buf_rvvb;
+            c->bswap16_buf = ff_bswap16_buf_rvvb;
+        }
+#endif
     }
+#endif
 #endif
 }

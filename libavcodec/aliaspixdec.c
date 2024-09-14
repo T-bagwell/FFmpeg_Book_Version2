@@ -69,9 +69,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *f,
     if (ret < 0)
         return ret;
 
-    f->pict_type = AV_PICTURE_TYPE_I;
-    f->key_frame = 1;
-
     x = 0;
     y = 1;
     out_buf = f->data[0];

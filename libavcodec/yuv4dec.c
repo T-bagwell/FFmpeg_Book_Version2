@@ -46,9 +46,6 @@ static int yuv4_decode_frame(AVCodecContext *avctx, AVFrame *pic,
     if ((ret = ff_get_buffer(avctx, pic, 0)) < 0)
         return ret;
 
-    pic->key_frame = 1;
-    pic->pict_type = AV_PICTURE_TYPE_I;
-
     y = pic->data[0];
     u = pic->data[1];
     v = pic->data[2];

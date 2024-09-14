@@ -209,8 +209,6 @@ static int bmp_decode_frame(AVCodecContext *avctx, AVFrame *p,
 
     if ((ret = ff_get_buffer(avctx, p, 0)) < 0)
         return ret;
-    p->pict_type = AV_PICTURE_TYPE_I;
-    p->key_frame = 1;
 
     buf   = buf0 + hsize;
     dsize = buf_size - hsize;

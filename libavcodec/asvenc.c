@@ -33,7 +33,6 @@
 #include "asv.h"
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "dct.h"
 #include "encode.h"
 #include "fdctdsp.h"
 #include "mpeg12data.h"
@@ -273,7 +272,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
 
     if ((ret = ff_alloc_packet(avctx, pkt, c->mb_height * c->mb_width * MAX_MB_SIZE +
-                               AV_INPUT_BUFFER_MIN_SIZE)) < 0)
+                               FF_INPUT_BUFFER_MIN_SIZE)) < 0)
         return ret;
 
     init_put_bits(&a->pb, pkt->data, pkt->size);
@@ -368,6 +367,7 @@ const FFCodec ff_asv1_encoder = {
     FF_CODEC_ENCODE_CB(encode_frame),
     .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
+    .color_ranges   = AVCOL_RANGE_MPEG,
 };
 #endif
 
@@ -383,5 +383,6 @@ const FFCodec ff_asv2_encoder = {
     FF_CODEC_ENCODE_CB(encode_frame),
     .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
+    .color_ranges   = AVCOL_RANGE_MPEG,
 };
 #endif

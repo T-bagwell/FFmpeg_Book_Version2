@@ -21,6 +21,7 @@
  */
 
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
@@ -1484,11 +1485,13 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             return ret;
 
         ctx->rotate_code = header.rotate_code;
-        if ((ctx->frame->key_frame = !header.seq_num)) {
+        if (!header.seq_num) {
+            ctx->frame->flags |= AV_FRAME_FLAG_KEY;
             ctx->frame->pict_type = AV_PICTURE_TYPE_I;
             fill_frame(ctx->frm1, ctx->npixels, header.bg_color);
             fill_frame(ctx->frm2, ctx->npixels, header.bg_color);
         } else {
+            ctx->frame->flags &= ~AV_FRAME_FLAG_KEY;
             ctx->frame->pict_type = AV_PICTURE_TYPE_P;
         }
 

@@ -29,6 +29,7 @@
 #include <poll.h>
 #include "libavcodec/avcodec.h"
 #include "libavutil/pixdesc.h"
+#include "refstruct.h"
 #include "v4l2_context.h"
 #include "v4l2_buffers.h"
 #include "v4l2_m2m.h"
@@ -229,7 +230,7 @@ static void v4l2_free_buffer(void *opaque, uint8_t *unused)
                 ff_v4l2_buffer_enqueue(avbuf);
         }
 
-        av_buffer_unref(&avbuf->context_ref);
+        ff_refstruct_unref(&avbuf->context_ref);
     }
 }
 
@@ -240,9 +241,7 @@ static int v4l2_buf_increase_ref(V4L2Buffer *in)
     if (in->context_ref)
         atomic_fetch_add(&in->context_refcount, 1);
     else {
-        in->context_ref = av_buffer_ref(s->self_ref);
-        if (!in->context_ref)
-            return AVERROR(ENOMEM);
+        in->context_ref = ff_refstruct_ref(s->self_ref);
 
         in->context_refcount = 1;
     }
@@ -427,7 +426,8 @@ int ff_v4l2_buffer_buf_to_avframe(AVFrame *frame, V4L2Buffer *avbuf)
         return ret;
 
     /* 2. get frame information */
-    frame->key_frame = !!(avbuf->buf.flags & V4L2_BUF_FLAG_KEYFRAME);
+    if (avbuf->buf.flags & V4L2_BUF_FLAG_KEYFRAME)
+        frame->flags |= AV_FRAME_FLAG_KEY;
     frame->color_primaries = v4l2_get_color_primaries(avbuf);
     frame->colorspace = v4l2_get_color_space(avbuf);
     frame->color_range = v4l2_get_color_range(avbuf);

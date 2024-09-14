@@ -21,6 +21,7 @@
 
 #include "config_components.h"
 
+#include "libavutil/mem.h"
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
@@ -473,7 +474,7 @@ static void predictor_init_state(int *k, int *state, int order)
 
 static int predictor_calc_error(int *k, int *state, int order, int error)
 {
-    int i, x = error - shift_down(k[order-1] *  (unsigned)state[order-1], LATTICE_SHIFT);
+    int i, x = error - (unsigned)shift_down(k[order-1] *  (unsigned)state[order-1], LATTICE_SHIFT);
 
 #if 1
     int *k_ptr = &(k[order-2]),
@@ -1013,7 +1014,7 @@ static int sonic_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (s->lossless)
         quant = 1;
     else
-        quant = get_symbol(&c, state, 0) * SAMPLE_FACTOR;
+        quant = get_symbol(&c, state, 0) * (unsigned)SAMPLE_FACTOR;
 
 //    av_log(NULL, AV_LOG_INFO, "quant: %d\n", quant);
 

@@ -20,10 +20,11 @@
 
 #include "libavutil/riscv/asm.S"
 
-func ff_vorbis_inverse_coupling_rvv, zve32f
+func ff_vorbis_inverse_coupling_rvv, zve32f, zba
+        lpad    0
         fmv.w.x   ft0, zero
 1:
-        vsetvli   t0, a2, e32, m1, ta, ma
+        vsetvli   t0, a2, e32, m4, ta, ma
         vle32.v   v16, (a1)
         sub       a2, a2, t0
         vle32.v   v24, (a0)

@@ -19,9 +19,11 @@
 #include <string.h>
 
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
+
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "vaapi_vpp.h"
 
 int ff_vaapi_vpp_query_formats(AVFilterContext *avctx)
@@ -36,6 +38,10 @@ int ff_vaapi_vpp_query_formats(AVFilterContext *avctx)
         return err;
     if ((err = ff_formats_ref(ff_make_format_list(pix_fmts),
                               &avctx->outputs[0]->incfg.formats)) < 0)
+        return err;
+
+    if ((err = ff_set_common_all_color_spaces(avctx)) < 0 ||
+        (err = ff_set_common_all_color_ranges(avctx)) < 0)
         return err;
 
     return 0;
@@ -69,19 +75,20 @@ void ff_vaapi_vpp_pipeline_uninit(AVFilterContext *avctx)
 
 int ff_vaapi_vpp_config_input(AVFilterLink *inlink)
 {
+    FilterLink          *l = ff_filter_link(inlink);
     AVFilterContext *avctx = inlink->dst;
     VAAPIVPPContext *ctx   = avctx->priv;
 
     if (ctx->pipeline_uninit)
         ctx->pipeline_uninit(avctx);
 
-    if (!inlink->hw_frames_ctx) {
+    if (!l->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
                "required to associate the processing device.\n");
         return AVERROR(EINVAL);
     }
 
-    ctx->input_frames_ref = av_buffer_ref(inlink->hw_frames_ctx);
+    ctx->input_frames_ref = av_buffer_ref(l->hw_frames_ctx);
     if (!ctx->input_frames_ref) {
         av_log(avctx, AV_LOG_ERROR, "A input frames reference create "
                "failed.\n");
@@ -94,7 +101,10 @@ int ff_vaapi_vpp_config_input(AVFilterLink *inlink)
 
 int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
 {
+    FilterLink       *outl = ff_filter_link(outlink);
     AVFilterContext *avctx = outlink->src;
+    AVFilterLink   *inlink = avctx->inputs[0];
+    FilterLink        *inl = ff_filter_link(inlink);
     VAAPIVPPContext *ctx   = avctx->priv;
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
@@ -110,6 +120,17 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
         ctx->output_width  = avctx->inputs[0]->w;
     if (!ctx->output_height)
         ctx->output_height = avctx->inputs[0]->h;
+
+    outlink->w = ctx->output_width;
+    outlink->h = ctx->output_height;
+
+    if (ctx->passthrough) {
+        if (inl->hw_frames_ctx)
+            outl->hw_frames_ctx = av_buffer_ref(inl->hw_frames_ctx);
+        av_log(ctx, AV_LOG_VERBOSE, "Using VAAPI filter passthrough mode.\n");
+
+        return 0;
+    }
 
     av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
@@ -172,28 +193,31 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
         goto fail;
     }
 
-    outlink->hw_frames_ctx = av_hwframe_ctx_alloc(ctx->device_ref);
-    if (!outlink->hw_frames_ctx) {
+    outl->hw_frames_ctx = av_hwframe_ctx_alloc(ctx->device_ref);
+    if (!outl->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create HW frame context "
                "for output.\n");
         err = AVERROR(ENOMEM);
         goto fail;
     }
 
-    output_frames = (AVHWFramesContext*)outlink->hw_frames_ctx->data;
+    output_frames = (AVHWFramesContext*)outl->hw_frames_ctx->data;
 
     output_frames->format    = AV_PIX_FMT_VAAPI;
     output_frames->sw_format = ctx->output_format;
     output_frames->width     = ctx->output_width;
     output_frames->height    = ctx->output_height;
 
-    output_frames->initial_pool_size = 4;
+    if (CONFIG_VAAPI_1)
+        output_frames->initial_pool_size = 0;
+    else
+        output_frames->initial_pool_size = 4;
 
     err = ff_filter_init_hw_frames(avctx, outlink, 10);
     if (err < 0)
         goto fail;
 
-    err = av_hwframe_ctx_init(outlink->hw_frames_ctx);
+    err = av_hwframe_ctx_init(outl->hw_frames_ctx);
     if (err < 0) {
         av_log(avctx, AV_LOG_ERROR, "Failed to initialise VAAPI frame "
                "context for output: %d\n", err);
@@ -203,6 +227,8 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     va_frames = output_frames->hwctx;
 
     av_assert0(ctx->va_context == VA_INVALID_ID);
+    av_assert0(output_frames->initial_pool_size ||
+               (va_frames->surface_ids == NULL && va_frames->nb_surfaces == 0));
     vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
                           ctx->output_width, ctx->output_height,
                           VA_PROGRESSIVE,
@@ -213,9 +239,6 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
                "context: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
-
-    outlink->w = ctx->output_width;
-    outlink->h = ctx->output_height;
 
     if (ctx->build_filter_params) {
         err = ctx->build_filter_params(avctx);
@@ -228,7 +251,7 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     return 0;
 
 fail:
-    av_buffer_unref(&outlink->hw_frames_ctx);
+    av_buffer_unref(&outl->hw_frames_ctx);
     av_freep(&hwconfig);
     av_hwframe_constraints_free(&constraints);
     return err;
@@ -518,7 +541,6 @@ int ff_vaapi_vpp_init_params(AVFilterContext *avctx,
                              AVFrame *output_frame)
 {
     VAAPIVPPContext *ctx = avctx->priv;
-    VASurfaceID input_surface;
     int err;
 
     ctx->input_region = (VARectangle) {
@@ -534,10 +556,8 @@ int ff_vaapi_vpp_init_params(AVFilterContext *avctx,
     output_frame->crop_left   = 0;
     output_frame->crop_right  = 0;
 
-    input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3],
-
     *params = (VAProcPipelineParameterBuffer) {
-        .surface                 = input_surface,
+        .surface                 = ff_vaapi_vpp_get_surface_id(input_frame),
         .surface_region          = &ctx->input_region,
         .output_region           = NULL,
         .output_background_color = VAAPI_VPP_BACKGROUND_BLACK,
@@ -556,6 +576,10 @@ int ff_vaapi_vpp_init_params(AVFilterContext *avctx,
                                       input_frame, output_frame);
     if (err < 0)
         return err;
+
+    av_log(avctx, AV_LOG_DEBUG, "Filter frame from surface %#x to %#x.\n",
+           ff_vaapi_vpp_get_surface_id(input_frame),
+           ff_vaapi_vpp_get_surface_id(output_frame));
 
     return 0;
 }
@@ -623,7 +647,6 @@ int ff_vaapi_vpp_render_pictures(AVFilterContext *avctx,
                                  AVFrame *output_frame)
 {
     VAAPIVPPContext *ctx = avctx->priv;
-    VASurfaceID output_surface;
     VABufferID *params_ids;
     VAStatus vas;
     int err;
@@ -635,10 +658,8 @@ int ff_vaapi_vpp_render_pictures(AVFilterContext *avctx,
     for (int i = 0; i < cout; i++)
         params_ids[i] = VA_INVALID_ID;
 
-    output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-
     vas = vaBeginPicture(ctx->hwctx->display,
-                         ctx->va_context, output_surface);
+                         ctx->va_context, ff_vaapi_vpp_get_surface_id(output_frame));
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to attach new picture: "
                "%d (%s).\n", vas, vaErrorStr(vas));

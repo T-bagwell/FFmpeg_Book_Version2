@@ -22,16 +22,14 @@
 
 #include <float.h>
 
-#include "libavutil/imgutils.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/tx.h"
 
 #include "avfilter.h"
-#include "formats.h"
+#include "filters.h"
 #include "framesync.h"
-#include "internal.h"
-#include "video.h"
 
 #define MAX_THREADS 16
 
@@ -86,9 +84,9 @@ typedef struct ConvolveContext {
 
 static const AVOption convolve_options[] = {
     { "planes",  "set planes to convolve",                  OFFSET(planes),   AV_OPT_TYPE_INT,   {.i64=7}, 0, 15, FLAGS },
-    { "impulse", "when to process impulses",                OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, "impulse" },
-    {   "first", "process only first impulse, ignore rest", 0,                AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, "impulse" },
-    {   "all",   "process all impulses",                    0,                AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, "impulse" },
+    { "impulse", "when to process impulses",                OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, .unit = "impulse" },
+    {   "first", "process only first impulse, ignore rest", 0,                AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, .unit = "impulse" },
+    {   "all",   "process all impulses",                    0,                AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, .unit = "impulse" },
     { "noise",   "set noise",                               OFFSET(noise),    AV_OPT_TYPE_FLOAT, {.dbl=0.0000001}, 0,  1, FLAGS },
     { NULL },
 };
@@ -746,10 +744,12 @@ static int do_convolve(FFFrameSync *fs)
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *outl = ff_filter_link(outlink);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(outlink->format);
     AVFilterContext *ctx = outlink->src;
     ConvolveContext *s = ctx->priv;
     AVFilterLink *mainlink = ctx->inputs[0];
+    FilterLink         *ml = ff_filter_link(mainlink);
     AVFilterLink *secondlink = ctx->inputs[1];
     int ret, i, j;
 
@@ -771,7 +771,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = mainlink->h;
     outlink->time_base = mainlink->time_base;
     outlink->sample_aspect_ratio = mainlink->sample_aspect_ratio;
-    outlink->frame_rate = mainlink->frame_rate;
+    outl->frame_rate = ml->frame_rate;
 
     if ((ret = ff_framesync_configure(&s->fs)) < 0)
         return ret;
@@ -895,9 +895,9 @@ const AVFilter ff_vf_convolve = {
 
 static const AVOption deconvolve_options[] = {
     { "planes",  "set planes to deconvolve",                OFFSET(planes),   AV_OPT_TYPE_INT,   {.i64=7}, 0, 15, FLAGS },
-    { "impulse", "when to process impulses",                OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, "impulse" },
-    {   "first", "process only first impulse, ignore rest", 0,                AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, "impulse" },
-    {   "all",   "process all impulses",                    0,                AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, "impulse" },
+    { "impulse", "when to process impulses",                OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, .unit = "impulse" },
+    {   "first", "process only first impulse, ignore rest", 0,                AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, .unit = "impulse" },
+    {   "all",   "process all impulses",                    0,                AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, .unit = "impulse" },
     { "noise",   "set noise",                               OFFSET(noise),    AV_OPT_TYPE_FLOAT, {.dbl=0.0000001}, 0,  1, FLAGS },
     { NULL },
 };
@@ -925,9 +925,9 @@ const AVFilter ff_vf_deconvolve = {
 
 static const AVOption xcorrelate_options[] = {
     { "planes",  "set planes to cross-correlate",     OFFSET(planes),   AV_OPT_TYPE_INT,   {.i64=7}, 0, 15, FLAGS },
-    { "secondary", "when to process secondary frame", OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, "impulse" },
-    {   "first", "process only first secondary frame, ignore rest", 0,  AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, "impulse" },
-    {   "all",   "process all secondary frames",                    0,  AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, "impulse" },
+    { "secondary", "when to process secondary frame", OFFSET(impulse),  AV_OPT_TYPE_INT,   {.i64=1}, 0,  1, FLAGS, .unit = "impulse" },
+    {   "first", "process only first secondary frame, ignore rest", 0,  AV_OPT_TYPE_CONST, {.i64=0}, 0,  0, FLAGS, .unit = "impulse" },
+    {   "all",   "process all secondary frames",                    0,  AV_OPT_TYPE_CONST, {.i64=1}, 0,  0, FLAGS, .unit = "impulse" },
     { NULL },
 };
 
@@ -958,13 +958,7 @@ static const AVFilterPad xcorrelate_inputs[] = {
     },
 };
 
-static const AVFilterPad xcorrelate_outputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-        .config_props  = config_output,
-    },
-};
+#define xcorrelate_outputs convolve_outputs
 
 const AVFilter ff_vf_xcorrelate = {
     .name          = "xcorrelate",

@@ -25,11 +25,13 @@
  */
 
 #include <float.h>
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/timestamp.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
+#include "video.h"
 
 typedef struct BlackDetectContext {
     const AVClass *class;
@@ -171,6 +173,7 @@ static int black_counter(AVFilterContext *ctx, void *arg,
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
 {
+    FilterLink *inl = ff_filter_link(inlink);
     AVFilterContext *ctx = inlink->dst;
     BlackDetectContext *s = ctx->priv;
     double picture_black_ratio = 0;
@@ -193,7 +196,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
 
     av_log(ctx, AV_LOG_DEBUG,
            "frame:%"PRId64" picture_black_ratio:%f pts:%s t:%s type:%c\n",
-           inlink->frame_count_out, picture_black_ratio,
+           inl->frame_count_out, picture_black_ratio,
            av_ts2str(picref->pts), av_ts2timestr(picref->pts, &s->time_base),
            av_get_picture_type_char(picref->pict_type));
 
@@ -241,19 +244,12 @@ static const AVFilterPad blackdetect_inputs[] = {
     },
 };
 
-static const AVFilterPad blackdetect_outputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-    },
-};
-
 const AVFilter ff_vf_blackdetect = {
     .name          = "blackdetect",
     .description   = NULL_IF_CONFIG_SMALL("Detect video intervals that are (almost) black."),
     .priv_size     = sizeof(BlackDetectContext),
     FILTER_INPUTS(blackdetect_inputs),
-    FILTER_OUTPUTS(blackdetect_outputs),
+    FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .uninit        = uninit,
     .priv_class    = &blackdetect_class,

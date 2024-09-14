@@ -26,7 +26,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
 #include "libavutil/internal.h"
-#include "libavutil/thread.h"
+#include "libavutil/mem.h"
 #include "libavutil/time.h"
 
 #include "libavcodec/internal.h"
@@ -37,23 +37,12 @@
 #if CONFIG_NETWORK
 #include "network.h"
 #endif
-
-static AVMutex avformat_mutex = AV_MUTEX_INITIALIZER;
+#include "os_support.h"
 
 /**
  * @file
  * various utility functions for use within FFmpeg
  */
-
-int ff_lock_avformat(void)
-{
-    return ff_mutex_lock(&avformat_mutex) ? -1 : 0;
-}
-
-int ff_unlock_avformat(void)
-{
-    return ff_mutex_unlock(&avformat_mutex) ? -1 : 0;
-}
 
 /* an arbitrarily chosen "sane" max packet size -- 50M */
 #define SANE_CHUNK_SIZE (50000000)

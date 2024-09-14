@@ -161,7 +161,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_MPEG2VIDEO,   MKTAG('M', 'P', 'E', 'G') },
     { AV_CODEC_ID_MPEG1VIDEO,   MKTAG('P', 'I', 'M', '1') },
     { AV_CODEC_ID_MPEG2VIDEO,   MKTAG('P', 'I', 'M', '2') },
-    { AV_CODEC_ID_MPEG1VIDEO,   MKTAG('V', 'C', 'R', '2') },
+    { AV_CODEC_ID_MPEG2VIDEO,   MKTAG('V', 'C', 'R', '2') },
     { AV_CODEC_ID_MPEG1VIDEO,   MKTAG( 1 ,  0 ,  0 ,  16) },
     { AV_CODEC_ID_MPEG2VIDEO,   MKTAG( 2 ,  0 ,  0 ,  16) },
     { AV_CODEC_ID_MPEG4,        MKTAG( 4 ,  0 ,  0 ,  16) },
@@ -463,6 +463,8 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_MAGICYUV,     MKTAG('M', '0', 'Y', '4') },
     { AV_CODEC_ID_MAGICYUV,     MKTAG('M', '2', 'R', 'A') },
     { AV_CODEC_ID_MAGICYUV,     MKTAG('M', '2', 'R', 'G') },
+    { AV_CODEC_ID_MAGICYUV,     MKTAG('M', '4', 'R', 'A') },
+    { AV_CODEC_ID_MAGICYUV,     MKTAG('M', '4', 'R', 'G') },
     { AV_CODEC_ID_YLC,          MKTAG('Y', 'L', 'C', '0') },
     { AV_CODEC_ID_SPEEDHQ,      MKTAG('S', 'H', 'Q', '0') },
     { AV_CODEC_ID_SPEEDHQ,      MKTAG('S', 'H', 'Q', '1') },
@@ -501,6 +503,10 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_NOTCHLC,      MKTAG('n', 'l', 'c', '1') },
     { AV_CODEC_ID_VQC,          MKTAG('V', 'Q', 'C', '1') },
     { AV_CODEC_ID_VQC,          MKTAG('V', 'Q', 'C', '2') },
+    { AV_CODEC_ID_RTV1,         MKTAG('R', 'T', 'V', '1') },
+    { AV_CODEC_ID_VMIX,         MKTAG('V', 'M', 'X', '1') },
+    { AV_CODEC_ID_LEAD,         MKTAG('L', 'E', 'A', 'D') },
+    { AV_CODEC_ID_EVC,          MKTAG('e', 'v', 'c', '1') },
     { AV_CODEC_ID_NONE,         0 }
 };
 

@@ -22,6 +22,7 @@
 #include "tx.h"
 #include "thread.h"
 #include "mem_internal.h"
+#include "common.h"
 #include "attributes.h"
 
 #ifdef TX_FLOAT
@@ -102,6 +103,12 @@ typedef void TXComplex;
 
 #define FOLD(a, b) ((a) + (b))
 
+#define BF(x, y, a, b)  \
+    do {                \
+        x = (a) - (b);  \
+        y = (a) + (b);  \
+    } while (0)
+
 #elif defined(TX_INT32)
 
 /* Properly rounds the result */
@@ -132,13 +139,13 @@ typedef void TXComplex;
 
 #define FOLD(x, y) ((int32_t)((x) + (unsigned)(y) + 32) >> 6)
 
-#endif /* TX_INT32 */
-
 #define BF(x, y, a, b)  \
     do {                \
-        x = (a) - (b);  \
-        y = (a) + (b);  \
+        x = (a) - (unsigned)(b);  \
+        y = (a) + (unsigned)(b);  \
     } while (0)
+
+#endif /* TX_INT32 */
 
 #define CMUL3(c, a, b) CMUL((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 

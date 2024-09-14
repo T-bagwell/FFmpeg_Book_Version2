@@ -24,6 +24,7 @@
 
 #include "avcodec.h"
 #include "libavutil/avutil.h"
+#include "libavutil/mem.h"
 #include "get_bits.h"
 #include "audiodsp.h"
 #include "codec_internal.h"
@@ -535,7 +536,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
             if (frame_erasure) {
                 ctx->rand_value = g729_prng(ctx->rand_value);
-                fc_indexes   = av_mod_uintp2(ctx->rand_value, format->fc_indexes_bits);
+                fc_indexes   = av_zero_extend(ctx->rand_value, format->fc_indexes_bits);
 
                 ctx->rand_value = g729_prng(ctx->rand_value);
                 pulses_signs = ctx->rand_value;
@@ -760,7 +761,11 @@ const FFCodec ff_g729_decoder = {
     .init           = decoder_init,
     FF_CODEC_DECODE_CB(decode_frame),
     .close          = decode_close,
-    .p.capabilities = AV_CODEC_CAP_SUBFRAMES | AV_CODEC_CAP_DR1,
+    .p.capabilities =
+#if FF_API_SUBFRAMES
+                      AV_CODEC_CAP_SUBFRAMES |
+#endif
+                      AV_CODEC_CAP_DR1,
 };
 
 const FFCodec ff_acelp_kelvin_decoder = {
@@ -772,5 +777,9 @@ const FFCodec ff_acelp_kelvin_decoder = {
     .init           = decoder_init,
     FF_CODEC_DECODE_CB(decode_frame),
     .close          = decode_close,
-    .p.capabilities = AV_CODEC_CAP_SUBFRAMES | AV_CODEC_CAP_DR1,
+    .p.capabilities =
+#if FF_API_SUBFRAMES
+                      AV_CODEC_CAP_SUBFRAMES |
+#endif
+                      AV_CODEC_CAP_DR1,
 };

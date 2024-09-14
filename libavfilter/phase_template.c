@@ -20,8 +20,6 @@
 
 #include "libavutil/avassert.h"
 #include "avfilter.h"
-#include "formats.h"
-#include "internal.h"
 #include "video.h"
 
 #undef pixel
@@ -57,10 +55,10 @@ static enum PhaseMode fn(analyze_plane)(void *ctx, enum PhaseMode mode, AVFrame 
     double bdiff, tdiff, pdiff;
 
     if (mode == AUTO) {
-        mode = new->interlaced_frame ? new->top_field_first ?
+        mode = (new->flags & AV_FRAME_FLAG_INTERLACED) ? (new->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) ?
                TOP_FIRST : BOTTOM_FIRST : PROGRESSIVE;
     } else if (mode == AUTO_ANALYZE) {
-        mode = new->interlaced_frame ? new->top_field_first ?
+        mode = (new->flags & AV_FRAME_FLAG_INTERLACED) ? (new->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) ?
                TOP_FIRST_ANALYZE : BOTTOM_FIRST_ANALYZE : FULL_ANALYZE;
     }
 

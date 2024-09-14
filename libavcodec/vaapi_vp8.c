@@ -19,7 +19,7 @@
 #include <va/va.h>
 #include <va/va_dec_vp8.h>
 
-#include "hwconfig.h"
+#include "hwaccel_internal.h"
 #include "vaapi_decode.h"
 #include "vp8.h"
 
@@ -209,7 +209,7 @@ static int vaapi_vp8_decode_slice(AVCodecContext *avctx,
     for (i = 0; i < 8; i++)
         sp.partition_size[i+1] = s->coeff_partition_size[i];
 
-    err = ff_vaapi_decode_make_slice_buffer(avctx, pic, &sp, sizeof(sp), data, data_size);
+    err = ff_vaapi_decode_make_slice_buffer(avctx, pic, &sp, 1, sizeof(sp), data, data_size);
     if (err)
         goto fail;
 
@@ -220,11 +220,11 @@ fail:
     return err;
 }
 
-const AVHWAccel ff_vp8_vaapi_hwaccel = {
-    .name                 = "vp8_vaapi",
-    .type                 = AVMEDIA_TYPE_VIDEO,
-    .id                   = AV_CODEC_ID_VP8,
-    .pix_fmt              = AV_PIX_FMT_VAAPI,
+const FFHWAccel ff_vp8_vaapi_hwaccel = {
+    .p.name               = "vp8_vaapi",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_VP8,
+    .p.pix_fmt            = AV_PIX_FMT_VAAPI,
     .start_frame          = &vaapi_vp8_start_frame,
     .end_frame            = &vaapi_vp8_end_frame,
     .decode_slice         = &vaapi_vp8_decode_slice,

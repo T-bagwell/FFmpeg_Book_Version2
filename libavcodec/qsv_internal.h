@@ -23,9 +23,9 @@
 
 #include "config.h"
 
-#if CONFIG_VAAPI
+#if CONFIG_VAAPI && !defined(_WIN32) // Do not enable for libva-win32 on Windows
 #define AVCODEC_QSV_LINUX_SESSION_HANDLE
-#endif //CONFIG_VAAPI
+#endif //CONFIG_VAAPI && !defined(_WIN32)
 
 #ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
 #include <stdio.h>
@@ -35,7 +35,6 @@
 #endif
 #include <fcntl.h>
 #include <va/va.h>
-#include <va/va_drm.h>
 #include "libavutil/hwcontext_vaapi.h"
 #endif
 
@@ -116,11 +115,12 @@ typedef struct QSVFramesContext {
     AVBufferRef *hw_frames_ctx;
     void *logctx;
 
-    /* The memory ids for the external frames.
-     * Refcounted, since we need one reference owned by the QSVFramesContext
-     * (i.e. by the encoder/decoder) and another one given to the MFX session
-     * from the frame allocator. */
-    AVBufferRef *mids_buf;
+    /**
+     * The memory ids for the external frames.
+     * Refcounted (via the RefStruct API), since we need one reference
+     * owned by the QSVFramesContext (i.e. by the encoder/decoder) and
+     * another one given to the MFX session from the frame allocator.
+     */
     QSVMid *mids;
     int  nb_mids;
 } QSVFramesContext;

@@ -20,10 +20,11 @@
 
 /* http://k.ylo.ph/2016/04/04/loudnorm.html */
 
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
+#include "formats.h"
 #include "audio.h"
 #include "ebur128.h"
 
@@ -116,10 +117,10 @@ static const AVOption loudnorm_options[] = {
     { "offset",           "set offset gain",                   OFFSET(offset),           AV_OPT_TYPE_DOUBLE,  {.dbl =  0.},    -99.,       99.,  FLAGS },
     { "linear",           "normalize linearly if possible",    OFFSET(linear),           AV_OPT_TYPE_BOOL,    {.i64 =  1},        0,         1,  FLAGS },
     { "dual_mono",        "treat mono input as dual-mono",     OFFSET(dual_mono),        AV_OPT_TYPE_BOOL,    {.i64 =  0},        0,         1,  FLAGS },
-    { "print_format",     "set print format for stats",        OFFSET(print_format),     AV_OPT_TYPE_INT,     {.i64 =  NONE},  NONE,  PF_NB -1,  FLAGS, "print_format" },
-    {     "none",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  NONE},     0,         0,  FLAGS, "print_format" },
-    {     "json",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  JSON},     0,         0,  FLAGS, "print_format" },
-    {     "summary",      0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  SUMMARY},  0,         0,  FLAGS, "print_format" },
+    { "print_format",     "set print format for stats",        OFFSET(print_format),     AV_OPT_TYPE_INT,     {.i64 =  NONE},  NONE,  PF_NB -1,  FLAGS, .unit = "print_format" },
+    {     "none",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  NONE},     0,         0,  FLAGS, .unit = "print_format" },
+    {     "json",         0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  JSON},     0,         0,  FLAGS, .unit = "print_format" },
+    {     "summary",      0,                                   0,                        AV_OPT_TYPE_CONST,   {.i64 =  SUMMARY},  0,         0,  FLAGS, .unit = "print_format" },
     { NULL }
 };
 
@@ -727,29 +728,26 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     LoudNormContext *s = ctx->priv;
-    AVFilterFormats *formats = NULL;
     static const int input_srate[] = {192000, -1};
-    int ret = ff_set_common_all_channel_counts(ctx);
+    static const enum AVSampleFormat sample_fmts[] = {
+            AV_SAMPLE_FMT_DBL,
+            AV_SAMPLE_FMT_NONE
+    };
+    int ret;
+
+    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBL);
-    if (ret)
-        return ret;
-    ret = ff_set_common_formats(ctx, formats);
-    if (ret)
-        return ret;
-
     if (s->frame_type != LINEAR_MODE) {
-        formats = ff_make_format_list(input_srate);
-    } else {
-        formats = ff_all_samplerates();
+        return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, input_srate);
     }
-
-    return ff_set_common_samplerates(ctx, formats);
+    return 0;
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -928,13 +926,6 @@ static const AVFilterPad avfilter_af_loudnorm_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_af_loudnorm_outputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_AUDIO,
-    },
-};
-
 const AVFilter ff_af_loudnorm = {
     .name          = "loudnorm",
     .description   = NULL_IF_CONFIG_SMALL("EBU R128 loudness normalization"),
@@ -944,6 +935,6 @@ const AVFilter ff_af_loudnorm = {
     .activate      = activate,
     .uninit        = uninit,
     FILTER_INPUTS(avfilter_af_loudnorm_inputs),
-    FILTER_OUTPUTS(avfilter_af_loudnorm_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_QUERY_FUNC2(query_formats),
 };

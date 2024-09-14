@@ -29,6 +29,7 @@
 #include <zlib.h>
 
 #include "libavutil/imgutils.h"
+#include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 
 #include "avcodec.h"
@@ -145,7 +146,8 @@ typedef struct G2MContext {
     int        got_header;
 
     uint8_t    *framebuf;
-    int        framebuf_stride, old_width, old_height;
+    int        framebuf_stride;
+    unsigned int framebuf_allocated;
 
     uint8_t    *synth_tile, *jpeg_tile, *epic_buf, *epic_buf_base;
     int        tile_stride, epic_buf_stride, old_tile_w, old_tile_h;
@@ -194,8 +196,8 @@ static av_cold void jpg_free_context(JPGContext *ctx)
     int i;
 
     for (i = 0; i < 2; i++) {
-        ff_free_vlc(&ctx->dc_vlc[i]);
-        ff_free_vlc(&ctx->ac_vlc[i]);
+        ff_vlc_free(&ctx->dc_vlc[i]);
+        ff_vlc_free(&ctx->ac_vlc[i]);
     }
 
     av_freep(&ctx->buf);
@@ -1050,7 +1052,6 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
 {
     int width, height;
     int hdr, zsize, npal, tidx = -1, ret;
-    int i, j;
     const uint8_t *src_end = src + src_size;
     uint8_t pal[768], transp[3];
     uLongf dlen = (c->tile_width + 1) * c->tile_height;
@@ -1069,11 +1070,10 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
     hdr      = *src++;
     sub_type = hdr >> 5;
     if (sub_type == 0) {
-        int j;
         memcpy(transp, src, 3);
         src += 3;
-        for (j = 0; j < height; j++, dst += c->framebuf_stride)
-            for (i = 0; i < width; i++)
+        for (int j = 0; j < height; j++, dst += c->framebuf_stride)
+            for (int i = 0; i < width; i++)
                 memcpy(dst + i * 3, transp, 3);
         return 0;
     } else if (sub_type == 1) {
@@ -1091,7 +1091,7 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
     memcpy(pal, src, npal * 3);
     src += npal * 3;
     if (sub_type != 2) {
-        for (i = 0; i < npal; i++) {
+        for (int i = 0; i < npal; i++) {
             if (!memcmp(pal + i * 3, transp, 3)) {
                 tidx = i;
                 break;
@@ -1123,8 +1123,8 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
     bstride = FFALIGN(width, 16) >> 3;
     // blocks are coded LSB and we need normal bitreader for JPEG data
     bits = 0;
-    for (i = 0; i < (FFALIGN(height, 16) >> 4); i++) {
-        for (j = 0; j < (FFALIGN(width, 16) >> 4); j++) {
+    for (int i = 0; i < (FFALIGN(height, 16) >> 4); i++) {
+        for (int j = 0; j < (FFALIGN(width, 16) >> 4); j++) {
             if (!bits) {
                 if (src >= src_end)
                     return AVERROR_INVALIDDATA;
@@ -1160,14 +1160,13 @@ static int g2m_init_buffers(G2MContext *c)
 {
     int aligned_height;
 
-    if (!c->framebuf || c->old_width < c->width || c->old_height < c->height) {
-        c->framebuf_stride = FFALIGN(c->width + 15, 16) * 3;
-        aligned_height     = c->height + 15;
-        av_free(c->framebuf);
-        c->framebuf = av_calloc(c->framebuf_stride, aligned_height);
-        if (!c->framebuf)
-            return AVERROR(ENOMEM);
-    }
+    c->framebuf_stride = FFALIGN(c->width + 15, 16) * 3;
+    aligned_height = c->height + 15;
+
+    av_fast_mallocz(&c->framebuf, &c->framebuf_allocated, c->framebuf_stride * aligned_height);
+    if (!c->framebuf)
+        return AVERROR(ENOMEM);
+
     if (!c->synth_tile || !c->jpeg_tile ||
         (c->compression == 2 && !c->epic_buf_base) ||
         c->old_tile_w < c->tile_width ||
@@ -1560,7 +1559,10 @@ static int g2m_decode_frame(AVCodecContext *avctx, AVFrame *pic,
         if ((ret = ff_get_buffer(avctx, pic, 0)) < 0)
             return ret;
 
-        pic->key_frame = got_header;
+        if (got_header)
+            pic->flags |= AV_FRAME_FLAG_KEY;
+        else
+            pic->flags &= ~AV_FRAME_FLAG_KEY;
         pic->pict_type = got_header ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
 
         for (i = 0; i < avctx->height; i++)
@@ -1617,6 +1619,7 @@ static av_cold int g2m_decode_end(AVCodecContext *avctx)
     av_freep(&c->jpeg_tile);
     av_freep(&c->cursor);
     av_freep(&c->framebuf);
+    c->framebuf_allocated = 0;
 
     return 0;
 }

@@ -31,6 +31,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/float_dsp.h"
+#include "libavutil/mem.h"
 #include "libavutil/tx.h"
 
 #define BITSTREAM_READER_LE
@@ -38,6 +39,7 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "get_bits.h"
+#include "internal.h"
 #include "vorbis.h"
 #include "vorbisdsp.h"
 #include "vorbis_data.h"
@@ -134,7 +136,6 @@ typedef struct vorbis_context_s {
     av_tx_fn      mdct_fn[2];
 
     uint8_t       first_frame;
-    int64_t       initial_pts;
     uint32_t      version;
     uint8_t       audio_channels;
     uint32_t      audio_samplerate;
@@ -180,11 +181,11 @@ static const char idx_err_str[] = "Index value %d out of range (0 - %d) for %s a
 
 static float vorbisfloat2float(unsigned val)
 {
-    double mant = val & 0x1fffff;
-    long exp    = (val & 0x7fe00000L) >> 21;
+    float mant = val & 0x1fffff;
+    int exp    = (val & 0x7fe00000) >> 21;
     if (val & 0x80000000)
         mant = -mant;
-    return ldexp(mant, exp - 20 - 768);
+    return ldexpf(mant, exp - 20 - 768);
 }
 
 
@@ -210,7 +211,7 @@ static void vorbis_free(vorbis_context *vc)
     if (vc->codebooks)
         for (i = 0; i < vc->codebook_count; ++i) {
             av_freep(&vc->codebooks[i].codevectors);
-            ff_free_vlc(&vc->codebooks[i].vlc);
+            ff_vlc_free(&vc->codebooks[i].vlc);
         }
     av_freep(&vc->codebooks);
 
@@ -368,6 +369,10 @@ static int vorbis_parse_setup_hdr_codebooks(vorbis_context *vc)
             unsigned codebook_value_bits = get_bits(gb, 4) + 1;
             unsigned codebook_sequence_p = get_bits1(gb);
 
+            if (!isfinite(codebook_minimum_value) || !isfinite(codebook_delta_value)) {
+                ret = AVERROR_INVALIDDATA;
+                goto error;
+            }
             ff_dlog(NULL, " We expect %d numbers for building the codevectors. \n",
                     codebook_lookup_values);
             ff_dlog(NULL, "  delta %f minmum %f \n",
@@ -450,11 +455,11 @@ static int vorbis_parse_setup_hdr_codebooks(vorbis_context *vc)
 
         codebook_setup->maxdepth = (codebook_setup->maxdepth+codebook_setup->nb_bits - 1) / codebook_setup->nb_bits;
 
-        if ((ret = init_vlc(&codebook_setup->vlc, codebook_setup->nb_bits,
+        if ((ret = vlc_init(&codebook_setup->vlc, codebook_setup->nb_bits,
                             entries, tmp_vlc_bits, sizeof(*tmp_vlc_bits),
                             sizeof(*tmp_vlc_bits), tmp_vlc_codes,
                             sizeof(*tmp_vlc_codes), sizeof(*tmp_vlc_codes),
-                            INIT_VLC_LE))) {
+                            VLC_INIT_LE))) {
             av_log(vc->avctx, AV_LOG_ERROR, " Error generating vlc tables. \n");
             goto error;
         }
@@ -1464,6 +1469,9 @@ static av_always_inline int vorbis_residue_decode_internal(vorbis_context *vc,
                             unsigned step = FASTDIV(vr->partition_size << 1, dim << 1);
                             vorbis_codebook codebook = vc->codebooks[vqbook];
 
+                            if (get_bits_left(gb) <= 0)
+                                return AVERROR_INVALIDDATA;
+
                             if (vr_type == 0) {
 
                                 voffs = voffset+j*vlen;
@@ -1839,13 +1847,7 @@ static int vorbis_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (!vc->first_frame) {
         vc->first_frame = 1;
-        vc->initial_pts = frame->pts;
-    }
-
-    if (frame->pts == vc->initial_pts) {
-        *got_frame_ptr = 0;
-        av_frame_unref(frame);
-        return buf_size;
+        avctx->internal->skip_samples = len;
     }
 
     ff_dlog(NULL, "parsed %d bytes %d bits, returned %d samples (*ch*bits) \n",
@@ -1877,6 +1879,7 @@ static av_cold void vorbis_decode_flush(AVCodecContext *avctx)
                              sizeof(*vc->saved));
     }
     vc->previous_window = -1;
+    vc->first_frame = 0;
 }
 
 const FFCodec ff_vorbis_decoder = {
@@ -1891,7 +1894,6 @@ const FFCodec ff_vorbis_decoder = {
     .flush           = vorbis_decode_flush,
     .p.capabilities  = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF,
     .caps_internal   = FF_CODEC_CAP_INIT_CLEANUP,
-    CODEC_OLD_CHANNEL_LAYOUTS_ARRAY(ff_vorbis_channel_layouts)
     .p.ch_layouts    = ff_vorbis_ch_layouts,
     .p.sample_fmts   = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_NONE },

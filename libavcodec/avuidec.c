@@ -71,9 +71,6 @@ static int avui_decode_frame(AVCodecContext *avctx, AVFrame *pic,
     if ((ret = ff_get_buffer(avctx, pic, 0)) < 0)
         return ret;
 
-    pic->key_frame = 1;
-    pic->pict_type = AV_PICTURE_TYPE_I;
-
     if (!interlaced) {
         src  += avctx->width * skip;
         srca += avctx->width * skip;
