@@ -59,7 +59,7 @@ static void sbr_turnoff(SpectralBandReplication *sbr) {
     sbr->start = 0;
     sbr->usac = 0;
     sbr->ready_for_dequant = 0;
-    // Init defults used in pure upsampling mode
+    // Init defaults used in pure upsampling mode
     sbr->kx[1] = 32; //Typo in spec, kx' inits to 32
     sbr->m[1] = 0;
     // Reset values for first SBR header
@@ -599,6 +599,7 @@ static int sbr_make_f_derived(AACDecContext *ac, SpectralBandReplication *sbr)
 
     if (sbr->n_q > 5) {
         av_log(ac->avctx, AV_LOG_ERROR, "Too many noise floor scale factors: %d\n", sbr->n_q);
+        sbr->n_q = 1;
         return -1;
     }
 

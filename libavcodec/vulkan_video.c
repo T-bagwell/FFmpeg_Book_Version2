@@ -33,7 +33,6 @@ static const struct FFVkFormatMapEntry {
     { VK_FORMAT_R32_SFLOAT, AV_PIX_FMT_GRAYF32, VK_IMAGE_ASPECT_COLOR_BIT },
 
     /* RGB formats */
-    { VK_FORMAT_R16G16B16A16_UNORM,       AV_PIX_FMT_XV36,    VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_B8G8R8A8_UNORM,           AV_PIX_FMT_BGRA,    VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_R8G8B8A8_UNORM,           AV_PIX_FMT_RGBA,    VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_R8G8B8_UNORM,             AV_PIX_FMT_RGB24,   VK_IMAGE_ASPECT_COLOR_BIT },
@@ -84,11 +83,16 @@ static const struct FFVkFormatMapEntry {
     { VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM, AV_PIX_FMT_YUV444P12, ASPECT_3PLANE },
     { VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM, AV_PIX_FMT_YUV444P16, ASPECT_3PLANE },
 
-    /* Single plane 422 at 8, 10 and 12 bits */
+    /* Single plane 422 at 8, 10, 12 and 16 bits */
     { VK_FORMAT_G8B8G8R8_422_UNORM,                     AV_PIX_FMT_YUYV422, VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_B8G8R8G8_422_UNORM,                     AV_PIX_FMT_UYVY422, VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16, AV_PIX_FMT_Y210,    VK_IMAGE_ASPECT_COLOR_BIT },
     { VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16, AV_PIX_FMT_Y212,    VK_IMAGE_ASPECT_COLOR_BIT },
+    { VK_FORMAT_G16B16G16R16_422_UNORM,                 AV_PIX_FMT_Y216,    VK_IMAGE_ASPECT_COLOR_BIT },
+
+    /* Single plane 444 at 10 and 12 bits */
+    { VK_FORMAT_A2R10G10B10_UNORM_PACK32,               AV_PIX_FMT_XV30,    VK_IMAGE_ASPECT_COLOR_BIT },
+    { VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,     AV_PIX_FMT_XV36,    VK_IMAGE_ASPECT_COLOR_BIT },
 };
 static const int nb_vk_format_map = FF_ARRAY_ELEMS(vk_format_map);
 
@@ -203,6 +207,25 @@ int ff_vk_h265_level_to_av(StdVideoH265LevelIdc level)
     }
 }
 
+StdVideoH265LevelIdc ff_vk_h265_level_to_vk(int level_idc)
+{
+    switch (level_idc) {
+    case 10: return STD_VIDEO_H265_LEVEL_IDC_1_0;
+    case 20: return STD_VIDEO_H265_LEVEL_IDC_2_0;
+    case 21: return STD_VIDEO_H265_LEVEL_IDC_2_1;
+    case 30: return STD_VIDEO_H265_LEVEL_IDC_3_0;
+    case 31: return STD_VIDEO_H265_LEVEL_IDC_3_1;
+    case 40: return STD_VIDEO_H265_LEVEL_IDC_4_0;
+    case 41: return STD_VIDEO_H265_LEVEL_IDC_4_1;
+    case 50: return STD_VIDEO_H265_LEVEL_IDC_5_0;
+    case 51: return STD_VIDEO_H265_LEVEL_IDC_5_1;
+    case 60: return STD_VIDEO_H265_LEVEL_IDC_6_0;
+    case 61: return STD_VIDEO_H265_LEVEL_IDC_6_1;
+    default:
+    case 62: return STD_VIDEO_H265_LEVEL_IDC_6_2;
+    }
+}
+
 StdVideoH264ProfileIdc ff_vk_h264_profile_to_vk(int profile)
 {
     switch (profile) {
@@ -214,29 +237,14 @@ StdVideoH264ProfileIdc ff_vk_h264_profile_to_vk(int profile)
     }
 }
 
-int ff_vk_h264_profile_to_av(StdVideoH264ProfileIdc profile)
+StdVideoH265ProfileIdc ff_vk_h265_profile_to_vk(int profile)
 {
     switch (profile) {
-    case STD_VIDEO_H264_PROFILE_IDC_BASELINE: return AV_PROFILE_H264_CONSTRAINED_BASELINE;
-    case STD_VIDEO_H264_PROFILE_IDC_MAIN: return AV_PROFILE_H264_MAIN;
-    case STD_VIDEO_H264_PROFILE_IDC_HIGH: return AV_PROFILE_H264_HIGH;
-    case STD_VIDEO_H264_PROFILE_IDC_HIGH_444_PREDICTIVE: return AV_PROFILE_H264_HIGH_444_PREDICTIVE;
-    default: return AV_PROFILE_UNKNOWN;
+    case AV_PROFILE_HEVC_MAIN:    return STD_VIDEO_H265_PROFILE_IDC_MAIN;
+    case AV_PROFILE_HEVC_MAIN_10: return STD_VIDEO_H265_PROFILE_IDC_MAIN_10;
+    case AV_PROFILE_HEVC_REXT:    return STD_VIDEO_H265_PROFILE_IDC_FORMAT_RANGE_EXTENSIONS;
+    default: return STD_VIDEO_H265_PROFILE_IDC_INVALID;
     }
-}
-
-int ff_vk_video_qf_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
-                        VkQueueFlagBits family, VkVideoCodecOperationFlagBitsKHR caps)
-{
-    for (int i = 0; i < s->hwctx->nb_qf; i++) {
-        if ((s->hwctx->qf[i].flags & family) &&
-            (s->hwctx->qf[i].video_caps & caps)) {
-            qf->queue_family = s->hwctx->qf[i].idx;
-            qf->nb_queues = s->hwctx->qf[i].num;
-            return 0;
-        }
-    }
-    return AVERROR(ENOTSUP);
 }
 
 int ff_vk_create_view(FFVulkanContext *s, FFVkVideoCommon *common,

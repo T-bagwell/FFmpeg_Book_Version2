@@ -78,12 +78,18 @@
                    (s)->nal_unit_type == HEVC_NAL_BLA_N_LP)
 #define IS_IRAP(s) ((s)->nal_unit_type >= HEVC_NAL_BLA_W_LP && (s)->nal_unit_type <= HEVC_NAL_RSV_IRAP_VCL23)
 
+#define HEVC_RECOVERY_UNSPECIFIED INT_MAX
+#define HEVC_RECOVERY_END INT_MIN
+#define HEVC_IS_RECOVERING(s) ((s)->recovery_poc != HEVC_RECOVERY_UNSPECIFIED && (s)->recovery_poc != HEVC_RECOVERY_END)
+
 enum RPSType {
     ST_CURR_BEF = 0,
     ST_CURR_AFT,
     ST_FOLL,
     LT_CURR,
     LT_FOLL,
+    INTER_LAYER0,
+    INTER_LAYER1,
     NB_RPS_TYPE,
 };
 
@@ -201,9 +207,9 @@ typedef struct RefPicListTab {
 typedef struct SliceHeader {
     unsigned int pps_id;
 
-    ///< address (in raster order) of the first block in the current slice segment
+    /// address (in raster order) of the first block in the current slice segment
     unsigned int   slice_segment_addr;
-    ///< address (in raster order) of the first block in the current slice
+    /// address (in raster order) of the first block in the current slice
     unsigned int   slice_addr;
 
     enum HEVCSliceType slice_type;
@@ -215,8 +221,9 @@ typedef struct SliceHeader {
     uint8_t dependent_slice_segment_flag;
     uint8_t pic_output_flag;
     uint8_t colour_plane_id;
+    uint8_t inter_layer_pred;
 
-    ///< RPS coded in the slice header itself is stored here
+    /// RPS coded in the slice header itself is stored here
     int short_term_ref_pic_set_sps_flag;
     int short_term_ref_pic_set_size;
     ShortTermRPS slice_rps;
@@ -350,6 +357,7 @@ typedef struct DBParams {
 #define HEVC_FRAME_FLAG_SHORT_REF (1 << 1)
 #define HEVC_FRAME_FLAG_LONG_REF  (1 << 2)
 #define HEVC_FRAME_FLAG_UNAVAILABLE (1 << 3)
+#define HEVC_FRAME_FLAG_CORRUPT (1 << 4)
 
 typedef struct HEVCFrame {
     union {
@@ -371,6 +379,10 @@ typedef struct HEVCFrame {
     int nb_rpl_elems;
 
     void *hwaccel_picture_private; ///< RefStruct reference
+
+    // for secondary-layer frames, this is the DPB index of the base-layer frame
+    // from the same AU, if it exists, otherwise -1
+    int base_layer_frame;
 
     /**
      * A combination of HEVC_FRAME_FLAG_*
@@ -441,6 +453,7 @@ typedef struct HEVCLocalContext {
 
 typedef struct HEVCLayerContext {
     HEVCFrame               DPB[32];
+    HEVCFrame              *cur_frame;
 
     const HEVCSPS          *sps; // RefStruct reference
 
@@ -472,8 +485,8 @@ typedef struct HEVCLayerContext {
     uint8_t                *sao_pixel_buffer_h[3];
     uint8_t                *sao_pixel_buffer_v[3];
 
-    struct FFRefStructPool *tab_mvf_pool;
-    struct FFRefStructPool *rpl_tab_pool;
+    struct AVRefStructPool *tab_mvf_pool;
+    struct AVRefStructPool *rpl_tab_pool;
 } HEVCLayerContext;
 
 typedef struct HEVCContext {
@@ -483,21 +496,25 @@ typedef struct HEVCContext {
     HEVCLocalContext     *local_ctx;
     unsigned           nb_local_ctx;
 
-    HEVCLayerContext      layers[1];
-    // index in layers of the layer currently being decoded
+    // per-layer decoding state, addressed by VPS layer indices
+    HEVCLayerContext      layers[HEVC_VPS_MAX_LAYERS];
+    // VPS index of the layer currently being decoded
     unsigned              cur_layer;
+    // bitmask of layer indices that are active for decoding/output
+    unsigned              layers_active_decode;
+    unsigned              layers_active_output;
 
     /** 1 if the independent slice segment header was successfully parsed */
     uint8_t slice_initialized;
 
-    struct ContainerFifo *output_fifo;
+    struct AVContainerFifo *output_fifo;
 
     HEVCParamSets ps;
     HEVCSEI sei;
     struct AVMD5 *md5_ctx;
 
-    ///< candidate references for the current frame
-    RefPicList rps[5];
+    /// candidate references for the current frame
+    RefPicList rps[NB_RPS_TYPE];
 
     const HEVCVPS *vps; ///< RefStruct reference
     const HEVCPPS *pps; ///< RefStruct reference
@@ -511,6 +528,7 @@ typedef struct HEVCContext {
     int slice_idx; ///< number of the slice being currently decoded
     int eos;       ///< current packet contains an EOS/EOB NAL
     int last_eos;  ///< last packet contains an EOS/EOB NAL
+    int recovery_poc;
 
     // NoRaslOutputFlag associated with the last IRAP frame
     int no_rasl_output_flag;
@@ -528,6 +546,9 @@ typedef struct HEVCContext {
     /** The target for the common_cabac_state of the local contexts. */
     HEVCCABACState cabac;
 
+    struct ThreadProgress *wpp_progress;
+    unsigned            nb_wpp_progress;
+
     atomic_int wpp_err;
 
     const uint8_t *data;
@@ -535,10 +556,23 @@ typedef struct HEVCContext {
     H2645Packet pkt;
     // type of the first VCL NAL of the current frame
     enum HEVCNALUnitType first_nal_type;
+    // index in pkt.nals of the NAL unit after which we can call
+    // ff_thread_finish_setup()
+    unsigned finish_setup_nal_idx;
 
     int is_nalff;           ///< this flag is != 0 if bitstream is encapsulated
                             ///< as a format defined in 14496-15
     int apply_defdispwin;
+
+    // multi-layer AVOptions
+    int         *view_ids;
+    unsigned  nb_view_ids;
+
+    unsigned    *view_ids_available;
+    unsigned  nb_view_ids_available;
+
+    unsigned    *view_pos_available;
+    unsigned  nb_view_pos_available;
 
     int nal_length_size;    ///< Number of bytes used for nal length (1, 2 or 4)
     int nuh_layer_id;
@@ -614,7 +648,8 @@ int ff_hevc_res_scale_sign_flag(HEVCLocalContext *lc, int idx);
 /**
  * Get the number of candidate references for the current frame.
  */
-int ff_hevc_frame_nb_refs(const SliceHeader *sh, const HEVCPPS *pps);
+int ff_hevc_frame_nb_refs(const SliceHeader *sh, const HEVCPPS *pps,
+                          unsigned layer_idx);
 
 int ff_hevc_set_new_ref(HEVCContext *s, HEVCLayerContext *l, int poc);
 
@@ -639,12 +674,14 @@ static av_always_inline int ff_hevc_nal_is_nonref(enum HEVCNALUnitType type)
  * Find frames in the DPB that are ready for output and either write them to the
  * output FIFO or drop their output flag, depending on the value of discard.
  *
- * @param max_output maximum number of output-pending frames that can be
- *                   present in the DPB before output is triggered
+ * @param max_output maximum number of AUs with an output-pending frame in at
+ *                   least one layer that can be present in the DPB before output
+ *                   is triggered
  * @param max_dpb maximum number of any frames that can be present in the DPB
- *                before output is triggered
+ *                for any layer before output is triggered
  */
-int ff_hevc_output_frames(HEVCContext *s, HEVCLayerContext *l,
+int ff_hevc_output_frames(HEVCContext *s,
+                          unsigned layers_active_decode, unsigned layers_active_output,
                           unsigned max_output, unsigned max_dpb, int discard);
 
 void ff_hevc_unref_frame(HEVCFrame *frame, int flags);
@@ -682,6 +719,8 @@ void ff_hevc_hls_residual_coding(HEVCLocalContext *lc, const HEVCPPS *pps,
                                  int c_idx);
 
 void ff_hevc_hls_mvd_coding(HEVCLocalContext *lc, int x0, int y0, int log2_cb_size);
+
+int ff_hevc_is_alpha_video(const HEVCContext *s);
 
 extern const uint8_t ff_hevc_qpel_extra_before[4];
 extern const uint8_t ff_hevc_qpel_extra_after[4];

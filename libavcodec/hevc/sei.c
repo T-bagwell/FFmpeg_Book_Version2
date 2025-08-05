@@ -79,6 +79,21 @@ static int decode_nal_sei_pic_timing(HEVCSEI *s, GetBitContext *gb,
     return 0;
 }
 
+static int decode_nal_sei_recovery_point(HEVCSEI *s, GetBitContext *gb)
+{
+    HEVCSEIRecoveryPoint *rec = &s->recovery_point;
+    int recovery_poc_cnt = get_se_golomb(gb);
+
+    if (recovery_poc_cnt > INT16_MAX || recovery_poc_cnt < INT16_MIN)
+        return AVERROR_INVALIDDATA;
+    rec->recovery_poc_cnt = recovery_poc_cnt;
+    rec->exact_match_flag = get_bits1(gb);
+    rec->broken_link_flag = get_bits1(gb);
+    rec->has_recovery_poc = 1;
+
+    return 0;
+}
+
 static int decode_nal_sei_active_parameter_sets(HEVCSEI *s, GetBitContext *gb, void *logctx)
 {
     int num_sps_ids_minus1;
@@ -150,6 +165,59 @@ static int decode_nal_sei_timecode(HEVCSEITimeCode *s, GetBitContext *gb)
     return 0;
 }
 
+static int decode_nal_sei_3d_reference_displays_info(HEVCSEITDRDI *s, GetBitContext *gb)
+{
+    s->prec_ref_display_width = get_ue_golomb(gb);
+    if (s->prec_ref_display_width > 31)
+        return AVERROR_INVALIDDATA;
+    s->ref_viewing_distance_flag = get_bits1(gb);
+    if (s->ref_viewing_distance_flag) {
+        s->prec_ref_viewing_dist = get_ue_golomb(gb);
+        if (s->prec_ref_viewing_dist > 31)
+            return AVERROR_INVALIDDATA;
+    }
+    s->num_ref_displays = get_ue_golomb(gb);
+    if (s->num_ref_displays > 31)
+        return AVERROR_INVALIDDATA;
+    s->num_ref_displays += 1;
+
+    for (int i = 0; i < s->num_ref_displays; i++) {
+        int length;
+        s->left_view_id[i] = get_ue_golomb(gb);
+        s->right_view_id[i] = get_ue_golomb(gb);
+        s->exponent_ref_display_width[i] = get_bits(gb, 6);
+        if (s->exponent_ref_display_width[i] > 62)
+            return AVERROR_INVALIDDATA;
+        else if (!s->exponent_ref_display_width[i])
+            length = FFMAX(0, (int)s->prec_ref_display_width - 30);
+        else
+            length = FFMAX(0, (int)s->exponent_ref_display_width[i] +
+                              (int)s->prec_ref_display_width - 31);
+        s->mantissa_ref_display_width[i] = get_bits_long(gb, length);
+        if (s->ref_viewing_distance_flag) {
+            s->exponent_ref_viewing_distance[i] = get_bits(gb, 6);
+            if (s->exponent_ref_viewing_distance[i] > 62)
+                return AVERROR_INVALIDDATA;
+            else if (!s->exponent_ref_viewing_distance[i])
+                length = FFMAX(0, (int)s->prec_ref_viewing_dist - 30);
+            else
+                length = FFMAX(0, (int)s->exponent_ref_viewing_distance[i] +
+                                  (int)s->prec_ref_viewing_dist - 31);
+            s->mantissa_ref_viewing_distance[i] = get_bits_long(gb, length);
+        }
+        s->additional_shift_present_flag[i] = get_bits1(gb);
+        if (s->additional_shift_present_flag[i]) {
+            s->num_sample_shift[i] = get_bits(gb, 10);
+            if (s->num_sample_shift[i] > 1023)
+                return AVERROR_INVALIDDATA;
+            s->num_sample_shift[i] -= 512;
+        }
+    }
+    s->three_dimensional_reference_displays_extension_flag = get_bits1(gb);
+
+    return 0;
+}
+
 static int decode_nal_sei_prefix(GetBitContext *gb, GetByteContext *gbyte,
                                  void *logctx, HEVCSEI *s,
                                  const HEVCParamSets *ps, int type)
@@ -159,10 +227,14 @@ static int decode_nal_sei_prefix(GetBitContext *gb, GetByteContext *gbyte,
         return decode_nal_sei_decoded_picture_hash(&s->picture_hash, gbyte);
     case SEI_TYPE_PIC_TIMING:
         return decode_nal_sei_pic_timing(s, gb, ps, logctx);
+    case SEI_TYPE_RECOVERY_POINT:
+        return decode_nal_sei_recovery_point(s, gb);
     case SEI_TYPE_ACTIVE_PARAMETER_SETS:
         return decode_nal_sei_active_parameter_sets(s, gb, logctx);
     case SEI_TYPE_TIME_CODE:
         return decode_nal_sei_timecode(&s->timecode, gb);
+    case SEI_TYPE_THREE_DIMENSIONAL_REFERENCE_DISPLAYS_INFO:
+        return decode_nal_sei_3d_reference_displays_info(&s->tdrdi, gb);
     default: {
         int ret = ff_h2645_sei_message_decode(&s->common, type, AV_CODEC_ID_HEVC,
                                               gb, gbyte, logctx);

@@ -468,6 +468,10 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         if (s->avctx->height <= 0)
             return AVERROR_INVALIDDATA;
     }
+    if (s->bayer && s->progressive) {
+        avpriv_request_sample(s->avctx, "progressively coded bayer picture");
+        return AVERROR_INVALIDDATA;
+    }
 
     if (s->got_picture && s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
         if (s->progressive) {
@@ -804,7 +808,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         if (!s->hwaccel_picture_private)
             return AVERROR(ENOMEM);
 
-        ret = hwaccel->start_frame(s->avctx, s->raw_image_buffer,
+        ret = hwaccel->start_frame(s->avctx, NULL, s->raw_image_buffer,
                                    s->raw_image_buffer_size);
         if (ret < 0)
             return ret;
@@ -2120,7 +2124,7 @@ static int mjpeg_decode_app(MJpegDecodeContext *s)
             av_log(s->avctx, AV_LOG_WARNING, "Invalid number of markers coded in APP2\n");
             goto out;
         } else if (s->iccnum != 0 && nummarkers != s->iccnum) {
-            av_log(s->avctx, AV_LOG_WARNING, "Mistmatch in coded number of ICC markers between markers\n");
+            av_log(s->avctx, AV_LOG_WARNING, "Mismatch in coded number of ICC markers between markers\n");
             goto out;
         } else if (seqno > nummarkers) {
             av_log(s->avctx, AV_LOG_WARNING, "Mismatching sequence number and coded number of ICC markers\n");
@@ -2504,7 +2508,11 @@ redo_for_pal8:
             break;
         case SOF3:
             avctx->profile     = AV_PROFILE_MJPEG_HUFFMAN_LOSSLESS;
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
             avctx->properties |= FF_CODEC_PROPERTY_LOSSLESS;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
             s->lossless    = 1;
             s->ls          = 0;
             s->progressive = 0;
@@ -2513,7 +2521,11 @@ redo_for_pal8:
             break;
         case SOF48:
             avctx->profile     = AV_PROFILE_MJPEG_JPEG_LS;
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
             avctx->properties |= FF_CODEC_PROPERTY_LOSSLESS;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
             s->lossless    = 1;
             s->ls          = 1;
             s->progressive = 0;
@@ -2557,6 +2569,8 @@ eoi_parser:
             }
             if ((ret = av_frame_ref(frame, s->picture_ptr)) < 0)
                 return ret;
+            if (s->lossless)
+                frame->flags |= AV_FRAME_FLAG_LOSSLESS;
             *got_frame = 1;
             s->got_picture = 0;
 
@@ -2940,11 +2954,8 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_INFO, "Single field\n");
     }
 
-    if (s->picture) {
-        av_frame_free(&s->picture);
-        s->picture_ptr = NULL;
-    } else if (s->picture_ptr)
-        av_frame_unref(s->picture_ptr);
+    av_frame_free(&s->picture);
+    s->picture_ptr = NULL;
 
     av_frame_free(&s->smv_frame);
 

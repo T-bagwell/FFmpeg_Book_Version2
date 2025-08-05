@@ -130,6 +130,8 @@ typedef struct StreamSpecifier {
 
     uint8_t              usable_only;
 
+    int                  disposition;
+
     char                *meta_key;
     char                *meta_val;
 
@@ -317,7 +319,7 @@ typedef struct Option {
 } Option;
 
 typedef struct OptionGroupDef {
-    /**< group name */
+    /** group name */
     const char *name;
     /**
      * Option to be used as group separator. Can be NULL for groups which
@@ -540,5 +542,7 @@ void remove_avoptions(AVDictionary **a, AVDictionary *b);
 
 /* Check if any keys exist in dictionary m */
 int check_avoptions(AVDictionary *m);
+
+int cmdutils_isalnum(char c);
 
 #endif /* FFTOOLS_CMDUTILS_H */

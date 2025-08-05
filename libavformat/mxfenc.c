@@ -40,6 +40,7 @@
 #include <inttypes.h>
 #include <time.h>
 
+#include "libavutil/attributes_internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/random_seed.h"
@@ -66,8 +67,8 @@
 #include "config.h"
 #include "version.h"
 
-extern const FFOutputFormat ff_mxf_d10_muxer;
-extern const FFOutputFormat ff_mxf_opatom_muxer;
+EXTERN const FFOutputFormat ff_mxf_d10_muxer;
+EXTERN const FFOutputFormat ff_mxf_opatom_muxer;
 
 #define IS_D10(s)    ((s)->oformat == &ff_mxf_d10_muxer.p)
 #define IS_OPATOM(s) ((s)->oformat == &ff_mxf_opatom_muxer.p)
@@ -129,7 +130,7 @@ typedef struct MXFContainerEssenceEntry {
     UID container_ul;
     UID element_ul;
     UID codec_ul;
-    void (*write_desc)(AVFormatContext *, AVStream *);
+    int (*write_desc)(AVFormatContext *, AVStream *);
 } MXFContainerEssenceEntry;
 
 typedef struct MXFPackage {
@@ -170,14 +171,14 @@ static const struct {
     { AV_CODEC_ID_NONE }
 };
 
-static void mxf_write_wav_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_aes3_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_mpegvideo_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_h264_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_ffv1_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_cdci_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_generic_sound_desc(AVFormatContext *s, AVStream *st);
-static void mxf_write_s436m_anc_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_wav_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_aes3_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_mpegvideo_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_h264_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_ffv1_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_cdci_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_generic_sound_desc(AVFormatContext *s, AVStream *st);
+static int mxf_write_s436m_anc_desc(AVFormatContext *s, AVStream *st);
 
 static const MXFContainerEssenceEntry mxf_essence_container_uls[] = {
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x02,0x0D,0x01,0x03,0x01,0x02,0x04,0x60,0x01 },
@@ -1061,7 +1062,7 @@ static void mxf_write_structural_component(AVFormatContext *s, AVStream *st, MXF
     AVIOContext *pb = s->pb;
 
     mxf_write_metadata_key(pb, 0x011100);
-    PRINT_KEY(s, "sturctural component key", pb->buf_ptr - 16);
+    PRINT_KEY(s, "structural component key", pb->buf_ptr - 16);
     klv_encode_ber_length(pb, 108);
 
     // write uid
@@ -1483,12 +1484,17 @@ static void mxf_write_avc_subdesc(AVFormatContext *s, AVStream *st)
     mxf_update_klv_size(s->pb, pos);
 }
 
-static void mxf_write_jpeg2000_subdesc(AVFormatContext *s, AVStream *st)
+static int mxf_write_jpeg2000_subdesc(AVFormatContext *s, AVStream *st)
 {
     MXFStreamContext *sc = st->priv_data;
     AVIOContext *pb = s->pb;
     int64_t pos;
-    int component_count = av_pix_fmt_count_planes(st->codecpar->format);
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(st->codecpar->format);
+
+    if (!pix_desc) {
+        av_log(s, AV_LOG_ERROR, "Pixel format not set - not writing JPEG2000SubDescriptor\n");
+        return AVERROR(EINVAL);
+    }
 
     /* JPEG2000 subdescriptor key */
     avio_write(pb, mxf_jpeg2000_subdescriptor_key, 16);
@@ -1527,20 +1533,21 @@ static void mxf_write_jpeg2000_subdesc(AVFormatContext *s, AVStream *st)
     avio_wb32(pb, sc->j2k_info.j2k_yt0siz);
     /* Image components number (Csiz) */
     mxf_write_local_tag(s, 2, 0x840A);
-    avio_wb16(pb, component_count);
+    avio_wb16(pb, pix_desc->nb_components);
     /* Array of picture components where each component comprises 3 bytes named Ssiz(i) (Pixel bitdepth - 1),
        XRSiz(i) (Horizontal sampling), YRSiz(i) (Vertical sampling). The array of 3-byte groups is preceded
        by the array header comprising a 4-byte value of the number of components followed by a 4-byte
        value of 3. */
-    mxf_write_local_tag(s, 8 + 3*component_count, 0x840B);
-    avio_wb32(pb, component_count);
+    mxf_write_local_tag(s, 8 + 3*pix_desc->nb_components, 0x840B);
+    avio_wb32(pb, pix_desc->nb_components);
     avio_wb32(pb, 3);
-    avio_write(pb, sc->j2k_info.j2k_comp_desc, 3*component_count);
+    avio_write(pb, sc->j2k_info.j2k_comp_desc, 3*pix_desc->nb_components);
 
     mxf_update_klv_size(pb, pos);
+    return 0;
 }
 
-static void mxf_write_cdci_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_cdci_desc(AVFormatContext *s, AVStream *st)
 {
     int64_t pos = mxf_write_cdci_common(s, st, mxf_cdci_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
@@ -1549,11 +1556,12 @@ static void mxf_write_cdci_desc(AVFormatContext *s, AVStream *st)
         mxf_write_avc_subdesc(s, st);
     }
     if (st->codecpar->codec_id == AV_CODEC_ID_JPEG2000) {
-         mxf_write_jpeg2000_subdesc(s, st);
+         return mxf_write_jpeg2000_subdesc(s, st);
     }
+    return 0;
 }
 
-static void mxf_write_h264_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_h264_desc(AVFormatContext *s, AVStream *st)
 {
     MXFStreamContext *sc = st->priv_data;
     if (sc->avc_intra) {
@@ -1563,9 +1571,10 @@ static void mxf_write_h264_desc(AVFormatContext *s, AVStream *st)
         mxf_update_klv_size(s->pb, pos);
         mxf_write_avc_subdesc(s, st);
     }
+    return 0;
 }
 
-static void mxf_write_ffv1_subdesc(AVFormatContext *s, AVStream *st)
+static int mxf_write_ffv1_subdesc(AVFormatContext *s, AVStream *st)
 {
     AVIOContext *pb = s->pb;
     MXFStreamContext *sc = st->priv_data;
@@ -1592,9 +1601,10 @@ static void mxf_write_ffv1_subdesc(AVFormatContext *s, AVStream *st)
     }
 
     mxf_update_klv_size(s->pb, pos);
+    return 0;
 }
 
-static void mxf_write_ffv1_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_ffv1_desc(AVFormatContext *s, AVStream *st)
 {
     int is_rgb, pos;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(st->codecpar->format);
@@ -1603,16 +1613,17 @@ static void mxf_write_ffv1_desc(AVFormatContext *s, AVStream *st)
 
     pos = mxf_write_cdci_common(s, st, is_rgb ? mxf_rgba_descriptor_key : mxf_cdci_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
-    mxf_write_ffv1_subdesc(s, st);
+    return mxf_write_ffv1_subdesc(s, st);
 }
 
-static void mxf_write_s436m_anc_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_s436m_anc_desc(AVFormatContext *s, AVStream *st)
 {
     int64_t pos = mxf_write_generic_desc(s, st, mxf_s436m_anc_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
+    return 0;
 }
 
-static void mxf_write_mpegvideo_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_mpegvideo_desc(AVFormatContext *s, AVStream *st)
 {
     AVIOContext *pb = s->pb;
     MXFStreamContext *sc = st->priv_data;
@@ -1648,6 +1659,7 @@ static void mxf_write_mpegvideo_desc(AVFormatContext *s, AVStream *st)
     }
 
     mxf_update_klv_size(pb, pos);
+    return 0;
 }
 
 static int64_t mxf_write_generic_sound_common(AVFormatContext *s, AVStream *st, const UID key)
@@ -1714,22 +1726,25 @@ static int64_t mxf_write_wav_common(AVFormatContext *s, AVStream *st, const UID 
     return pos;
 }
 
-static void mxf_write_wav_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_wav_desc(AVFormatContext *s, AVStream *st)
 {
     int64_t pos = mxf_write_wav_common(s, st, mxf_wav_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
+    return 0;
 }
 
-static void mxf_write_aes3_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_aes3_desc(AVFormatContext *s, AVStream *st)
 {
     int64_t pos = mxf_write_wav_common(s, st, mxf_aes3_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
+    return 0;
 }
 
-static void mxf_write_generic_sound_desc(AVFormatContext *s, AVStream *st)
+static int mxf_write_generic_sound_desc(AVFormatContext *s, AVStream *st)
 {
     int64_t pos = mxf_write_generic_sound_common(s, st, mxf_generic_sound_descriptor_key);
     mxf_update_klv_size(s->pb, pos);
+    return 0;
 }
 
 static const uint8_t mxf_indirect_value_utf16le[] = { 0x4c,0x00,0x02,0x10,0x01,0x00,0x00,0x00,0x00,0x06,0x0e,0x2b,0x34,0x01,0x04,0x01,0x01 };
@@ -1781,7 +1796,7 @@ static int mxf_write_user_comments(AVFormatContext *s, const AVDictionary *m)
     return count;
 }
 
-static void mxf_write_package(AVFormatContext *s, MXFPackage *package)
+static int mxf_write_package(AVFormatContext *s, MXFPackage *package)
 {
     MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -1876,9 +1891,13 @@ static void mxf_write_package(AVFormatContext *s, MXFPackage *package)
 
         if (package->type == SourcePackage && package->instance == 1) {
             MXFStreamContext *sc = st->priv_data;
-            mxf_essence_container_uls[sc->index].write_desc(s, st);
+            int ret = mxf_essence_container_uls[sc->index].write_desc(s, st);
+            if (ret < 0)
+                return ret;
         }
     }
+
+    return 0;
 }
 
 static int mxf_write_essence_container_data(AVFormatContext *s)
@@ -1946,8 +1965,11 @@ static int mxf_write_header_metadata_sets(AVFormatContext *s)
     mxf_write_identification(s);
     mxf_write_content_storage(s, packages, package_count);
     mxf->track_instance_count = 0;
-    for (i = 0; i < package_count; i++)
-        mxf_write_package(s, &packages[i]);
+    for (i = 0; i < package_count; i++) {
+        int ret = mxf_write_package(s, &packages[i]);
+        if (ret < 0)
+            return ret;
+    }
     mxf_write_essence_container_data(s);
     return 0;
 }
@@ -1961,7 +1983,19 @@ static unsigned klv_fill_size(uint64_t size)
         return pad & (KAG_SIZE-1);
 }
 
-static void mxf_write_index_table_segment(AVFormatContext *s)
+static int mxf_check_frame_offset(AVFormatContext *s, int offset)
+{
+    if (offset >= INT8_MIN && offset <= INT8_MAX)
+        return 0;
+
+    av_log(s, AV_LOG_ERROR, "Current implementation requires frame offset (%d) "
+            "to be within the range of [%d,%d]. Please reduce encoder GOP size, "
+            "or add support for wider frame offset ranges.\n",
+            offset, INT8_MIN, INT8_MAX);
+    return AVERROR_PATCHWELCOME;
+}
+
+static int mxf_write_index_table_segment(AVFormatContext *s)
 {
     MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -1970,11 +2004,12 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
     int prev_non_b_picture = 0;
     int audio_frame_size = 0;
     int64_t pos;
+    int err;
 
     av_log(s, AV_LOG_DEBUG, "edit units count %d\n", mxf->edit_units_count);
 
     if (!mxf->edit_units_count && !mxf->edit_unit_byte_count)
-        return;
+        return 0;
 
     avio_write(pb, index_table_segment_key, 16);
 
@@ -2073,15 +2108,26 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
                     if (j == mxf->edit_units_count)
                         av_log(s, AV_LOG_WARNING, "missing frames\n");
                     temporal_offset = j - key_index - pic_num_in_gop;
+                    err = mxf_check_frame_offset(s, temporal_offset);
+                    if (err < 0)
+                        return err;
                 }
             }
             avio_w8(pb, temporal_offset);
 
             if ((mxf->index_entries[i].flags & 0x30) == 0x30) { // back and forward prediction
+                int offset = mxf->last_key_index - i;
+                err = mxf_check_frame_offset(s, offset);
+                if (err < 0)
+                    return err;
                 sc->b_picture_count = FFMAX(sc->b_picture_count, i - prev_non_b_picture);
-                avio_w8(pb, mxf->last_key_index - i);
+                avio_w8(pb, offset);
             } else {
-                avio_w8(pb, key_index - i); // key frame offset
+                int offset = key_index - i;
+                err = mxf_check_frame_offset(s, offset);
+                if (err < 0)
+                    return err;
+                avio_w8(pb, offset); // key frame offset
                 if ((mxf->index_entries[i].flags & 0x20) == 0x20) // only forward
                     mxf->last_key_index = key_index;
                 prev_non_b_picture = i;
@@ -2105,6 +2151,8 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
     }
 
     mxf_update_klv_size(pb, pos);
+
+    return 0;
 }
 
 static void mxf_write_klv_fill(AVFormatContext *s)
@@ -2638,9 +2686,14 @@ static int mxf_parse_jpeg2000_frame(AVFormatContext *s, AVStream *st, AVPacket *
 {
     MXFContext *mxf = s->priv_data;
     MXFStreamContext *sc = st->priv_data;
-    int component_count = av_pix_fmt_count_planes(st->codecpar->format);
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(st->codecpar->format);
     GetByteContext g;
     uint32_t j2k_ncomponents;
+
+    if (!pix_desc) {
+        av_log(s, AV_LOG_ERROR, "Pixel format not set\n");
+        return AVERROR(EINVAL);
+    }
 
     if (mxf->header_written)
         return 1;
@@ -2655,7 +2708,7 @@ static int mxf_parse_jpeg2000_frame(AVFormatContext *s, AVStream *st, AVPacket *
         return AVERROR_INVALIDDATA;
     }
 
-    /* Extract usefull size information from the SIZ marker */
+    /* Extract useful size information from the SIZ marker */
     if (bytestream2_get_be16u(&g) != JPEG2000_SIZ) {
         av_log(s, AV_LOG_ERROR, "Mandatory SIZ marker is not present\n");
         return AVERROR_INVALIDDATA;
@@ -2671,7 +2724,7 @@ static int mxf_parse_jpeg2000_frame(AVFormatContext *s, AVStream *st, AVPacket *
     sc->j2k_info.j2k_xt0siz = bytestream2_get_be32u(&g);
     sc->j2k_info.j2k_yt0siz = bytestream2_get_be32u(&g);
     j2k_ncomponents = bytestream2_get_be16u(&g);
-    if (j2k_ncomponents != component_count) {
+    if (j2k_ncomponents != pix_desc->nb_components) {
         av_log(s, AV_LOG_ERROR, "Incoherence about components image number.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -3327,7 +3380,9 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
             if ((err = mxf_write_partition(s, 1, 2, header_open_partition_key, 1)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         } else {
             if ((err = mxf_write_partition(s, 0, 0, header_open_partition_key, 1)) < 0)
                 return err;
@@ -3343,7 +3398,9 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
             if ((err = mxf_write_partition(s, 1, 2, body_partition_key, 0)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         }
 
         mxf_write_klv_fill(s);
@@ -3428,7 +3485,9 @@ static int mxf_write_footer(AVFormatContext *s)
         if ((err = mxf_write_partition(s, 0, 2, footer_partition_key, 0)) < 0)
             return err;
         mxf_write_klv_fill(s);
-        mxf_write_index_table_segment(s);
+        err = mxf_write_index_table_segment(s);
+        if (err < 0)
+            return err;
     }
 
     mxf_write_klv_fill(s);
@@ -3447,7 +3506,9 @@ static int mxf_write_footer(AVFormatContext *s)
             if ((err = mxf_write_partition(s, 1, 2, header_closed_partition_key, 1)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         } else {
             if ((err = mxf_write_partition(s, 0, 0, header_closed_partition_key, 1)) < 0)
                 return err;

@@ -416,6 +416,7 @@ static int mediacodec_wrap_sw_audio_buffer(AVCodecContext *avctx,
         frame->pts = info->presentationTimeUs;
     }
     frame->pkt_dts = AV_NOPTS_VALUE;
+    frame->flags |= AV_FRAME_FLAG_KEY;
 
     av_log(avctx, AV_LOG_TRACE,
            "Frame: format=%d channels=%d sample_rate=%d nb_samples=%d",
@@ -536,6 +537,8 @@ static int mediacodec_wrap_sw_buffer(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "Could not get %s from format %s\n", key, format); \
         ret = AVERROR_EXTERNAL;                                                        \
         goto fail;                                                                     \
+    } else {                                                                           \
+        (name) = 0;                                                                    \
     }                                                                                  \
 } while (0)                                                                            \
 
@@ -593,7 +596,8 @@ static int mediacodec_dec_parse_video_format(AVCodecContext *avctx, MediaCodecDe
     AMEDIAFORMAT_GET_INT32(s->crop_right,  "crop-right",  0);
 
     // Try "crop" for NDK
-    if (!(s->crop_right && s->crop_bottom) && s->use_ndk_codec)
+    // MediaTek SOC return some default value like Rect(0, 0, 318, 238)
+    if (!(s->crop_right && s->crop_bottom) && s->use_ndk_codec && !strstr(s->codec_name, ".mtk."))
         ff_AMediaFormat_getRect(s->format, "crop", &s->crop_left, &s->crop_top, &s->crop_right, &s->crop_bottom);
 
     if (s->crop_right && s->crop_bottom) {

@@ -423,9 +423,21 @@ Please note that this filter is auto-inserted for MPEG-TS (muxer
 
 @section h264_redundant_pps
 
-This applies a specific fixup to some Blu-ray streams which contain
-redundant PPSs modifying irrelevant parameters of the stream which
-confuse other transformations which require correct extradata.
+This applies a specific fixup to some Blu-ray BDMV H264 streams
+which contain redundant PPSs. The PPSs modify irrelevant parameters
+of the stream, confusing other transformations which require
+the correct extradata.
+
+The encoder used on these impacted streams adds extra PPSs throughout
+the stream, varying the initial QP and whether weighted prediction
+was enabled. This causes issues after copying the stream into
+a global header container, as the starting PPS is not suitable
+for the rest of the stream. One side effect, for example,
+is seeking will return garbled output until a new PPS appears.
+
+This BSF removes the extra PPSs and rewrites the slice headers
+such that the stream uses a single leading PPS in the global header,
+which resolves the issue.
 
 @section hevc_metadata
 
@@ -696,12 +708,12 @@ ffmpeg -i INPUT -c copy -bsf noise=1 output.mkv
 Drop every video packet not marked as a keyframe after timestamp 30s but do not
 modify any of the remaining packets.
 @example
-ffmpeg -i INPUT -c copy -bsf:v noise=drop='gt(t\,30)*not(key)' output.mkv
+ffmpeg -i INPUT -c copy -bsf:v noise=drop='gt(pts*tb\,30)*not(key)' output.mkv
 @end example
 
 Drop one second of audio every 10 seconds and add some random noise to the rest.
 @example
-ffmpeg -i INPUT -c copy -bsf:a noise=amount=-1:drop='between(mod(t\,10)\,9\,10)' output.mkv
+ffmpeg -i INPUT -c copy -bsf:a noise=amount=-1:drop='between(mod(pts*tb\,10)\,9\,10)' output.mkv
 @end example
 
 @section null

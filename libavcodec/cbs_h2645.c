@@ -28,7 +28,7 @@
 #include "cbs_h266.h"
 #include "h264.h"
 #include "h2645_parse.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 #include "vvc.h"
 
 #include "hevc/hevc.h"
@@ -345,7 +345,7 @@ static int cbs_h2645_read_more_rbsp_data(GetBitContext *gbc)
 /* The CBS SEI code uses the refstruct API for the allocation
  * of its child buffers. */
 #define allocate(name, size) do { \
-        name  = ff_refstruct_allocz(size + \
+        name  = av_refstruct_allocz(size + \
                                         AV_INPUT_BUFFER_PADDING_SIZE); \
         if (!name) \
             return AVERROR(ENOMEM); \
@@ -769,7 +769,7 @@ static int cbs_h26 ## h26n ## _replace_ ## ps_var(CodedBitstreamContext *ctx, \
     if (priv->ps_var[id] == priv->active_ ## ps_var) \
         priv->active_ ## ps_var = NULL ; \
     av_assert0(unit->content_ref); \
-    ff_refstruct_replace(&priv->ps_var[id], unit->content_ref); \
+    av_refstruct_replace(&priv->ps_var[id], unit->content_ref); \
     return 0; \
 }
 
@@ -790,7 +790,7 @@ static int cbs_h26 ## h26n ## _replace_ ## ps_var(CodedBitstreamContext *ctx, \
     if (err < 0) \
         return err; \
     av_assert0(unit->content_ref); \
-    ff_refstruct_replace(&priv->ps_var[id], unit->content_ref); \
+    av_refstruct_replace(&priv->ps_var[id], unit->content_ref); \
     return 0; \
 }
 
@@ -810,10 +810,10 @@ static int cbs_h266_replace_sps(CodedBitstreamContext *ctx,
     if (priv->sps[id] && memcmp(priv->sps[id], unit->content_ref, sizeof(*priv->sps[id]))) {
         for (unsigned int i = 0; i < VVC_MAX_PPS_COUNT; i++) {
             if (priv->pps[i] && priv->pps[i]->pps_seq_parameter_set_id == id)
-                ff_refstruct_unref(&priv->pps[i]);
+                av_refstruct_unref(&priv->pps[i]);
         }
     }
-    ff_refstruct_replace(&priv->sps[id], unit->content_ref);
+    av_refstruct_replace(&priv->sps[id], unit->content_ref);
     return 0;
 }
 
@@ -828,7 +828,7 @@ static int cbs_h266_replace_ph(CodedBitstreamContext *ctx,
     if (err < 0)
         return err;
     av_assert0(unit->content_ref);
-    ff_refstruct_replace(&h266->ph_ref, unit->content_ref);
+    av_refstruct_replace(&h266->ph_ref, unit->content_ref);
     h266->ph = ph;
     return 0;
 }
@@ -1050,6 +1050,14 @@ static int cbs_h265_read_nal_unit(CodedBitstreamContext *ctx,
     case HEVC_NAL_AUD:
         {
             err = cbs_h265_read_aud(ctx, &gbc, unit->content);
+            if (err < 0)
+                return err;
+        }
+        break;
+
+    case HEVC_NAL_FD_NUT:
+        {
+            err = cbs_h265_read_filler(ctx, &gbc, unit->content);
             if (err < 0)
                 return err;
         }
@@ -1497,6 +1505,14 @@ static int cbs_h265_write_nal_unit(CodedBitstreamContext *ctx,
         }
         break;
 
+    case HEVC_NAL_FD_NUT:
+        {
+            err = cbs_h265_write_filler(ctx, pbc, unit->content);
+            if (err < 0)
+                return err;
+        }
+        break;
+
     case HEVC_NAL_SEI_PREFIX:
     case HEVC_NAL_SEI_SUFFIX:
         {
@@ -1894,9 +1910,9 @@ static void cbs_h264_flush(CodedBitstreamContext *ctx)
     CodedBitstreamH264Context *h264 = ctx->priv_data;
 
     for (int i = 0; i < FF_ARRAY_ELEMS(h264->sps); i++)
-        ff_refstruct_unref(&h264->sps[i]);
+        av_refstruct_unref(&h264->sps[i]);
     for (int i = 0; i < FF_ARRAY_ELEMS(h264->pps); i++)
-        ff_refstruct_unref(&h264->pps[i]);
+        av_refstruct_unref(&h264->pps[i]);
 
     h264->active_sps = NULL;
     h264->active_pps = NULL;
@@ -1911,9 +1927,9 @@ static void cbs_h264_close(CodedBitstreamContext *ctx)
     ff_h2645_packet_uninit(&h264->common.read_packet);
 
     for (i = 0; i < FF_ARRAY_ELEMS(h264->sps); i++)
-        ff_refstruct_unref(&h264->sps[i]);
+        av_refstruct_unref(&h264->sps[i]);
     for (i = 0; i < FF_ARRAY_ELEMS(h264->pps); i++)
-        ff_refstruct_unref(&h264->pps[i]);
+        av_refstruct_unref(&h264->pps[i]);
 }
 
 static void cbs_h265_flush(CodedBitstreamContext *ctx)
@@ -1921,11 +1937,11 @@ static void cbs_h265_flush(CodedBitstreamContext *ctx)
     CodedBitstreamH265Context *h265 = ctx->priv_data;
 
     for (int i = 0; i < FF_ARRAY_ELEMS(h265->vps); i++)
-        ff_refstruct_unref(&h265->vps[i]);
+        av_refstruct_unref(&h265->vps[i]);
     for (int i = 0; i < FF_ARRAY_ELEMS(h265->sps); i++)
-        ff_refstruct_unref(&h265->sps[i]);
+        av_refstruct_unref(&h265->sps[i]);
     for (int i = 0; i < FF_ARRAY_ELEMS(h265->pps); i++)
-        ff_refstruct_unref(&h265->pps[i]);
+        av_refstruct_unref(&h265->pps[i]);
 
     h265->active_vps = NULL;
     h265->active_sps = NULL;
@@ -1940,11 +1956,11 @@ static void cbs_h265_close(CodedBitstreamContext *ctx)
     ff_h2645_packet_uninit(&h265->common.read_packet);
 
     for (i = 0; i < FF_ARRAY_ELEMS(h265->vps); i++)
-        ff_refstruct_unref(&h265->vps[i]);
+        av_refstruct_unref(&h265->vps[i]);
     for (i = 0; i < FF_ARRAY_ELEMS(h265->sps); i++)
-        ff_refstruct_unref(&h265->sps[i]);
+        av_refstruct_unref(&h265->sps[i]);
     for (i = 0; i < FF_ARRAY_ELEMS(h265->pps); i++)
-        ff_refstruct_unref(&h265->pps[i]);
+        av_refstruct_unref(&h265->pps[i]);
 }
 
 static void cbs_h266_flush(CodedBitstreamContext *ctx)
@@ -1952,12 +1968,12 @@ static void cbs_h266_flush(CodedBitstreamContext *ctx)
     CodedBitstreamH266Context *h266 = ctx->priv_data;
 
     for (int i = 0; i < FF_ARRAY_ELEMS(h266->vps); i++)
-        ff_refstruct_unref(&h266->vps[i]);
+        av_refstruct_unref(&h266->vps[i]);
     for (int i = 0; i < FF_ARRAY_ELEMS(h266->sps); i++)
-        ff_refstruct_unref(&h266->sps[i]);
+        av_refstruct_unref(&h266->sps[i]);
     for (int i = 0; i < FF_ARRAY_ELEMS(h266->pps); i++)
-        ff_refstruct_unref(&h266->pps[i]);
-    ff_refstruct_unref(&h266->ph_ref);
+        av_refstruct_unref(&h266->pps[i]);
+    av_refstruct_unref(&h266->ph_ref);
 }
 
 static void cbs_h266_close(CodedBitstreamContext *ctx)
@@ -1968,7 +1984,7 @@ static void cbs_h266_close(CodedBitstreamContext *ctx)
     ff_h2645_packet_uninit(&h266->common.read_packet);
  }
 
-static void cbs_h264_free_sei(FFRefStructOpaque unused, void *content)
+static void cbs_h264_free_sei(AVRefStructOpaque unused, void *content)
 {
     H264RawSEI *sei = content;
     ff_cbs_sei_free_message_list(&sei->message_list);
@@ -1994,7 +2010,7 @@ static const CodedBitstreamUnitTypeDescriptor cbs_h264_unit_types[] = {
     CBS_UNIT_TYPE_END_OF_LIST
 };
 
-static void cbs_h265_free_sei(FFRefStructOpaque unused, void *content)
+static void cbs_h265_free_sei(AVRefStructOpaque unused, void *content)
 {
     H265RawSEI *sei = content;
     ff_cbs_sei_free_message_list(&sei->message_list);
@@ -2006,6 +2022,7 @@ static const CodedBitstreamUnitTypeDescriptor cbs_h265_unit_types[] = {
     CBS_UNIT_TYPE_INTERNAL_REF(HEVC_NAL_PPS, H265RawPPS, extension_data.data),
 
     CBS_UNIT_TYPE_POD(HEVC_NAL_AUD, H265RawAUD),
+    CBS_UNIT_TYPE_POD(HEVC_NAL_FD_NUT, H265RawFiller),
 
     // Slices of non-IRAP pictures.
     CBS_UNIT_RANGE_INTERNAL_REF(HEVC_NAL_TRAIL_N, HEVC_NAL_RASL_R,
@@ -2020,7 +2037,7 @@ static const CodedBitstreamUnitTypeDescriptor cbs_h265_unit_types[] = {
     CBS_UNIT_TYPE_END_OF_LIST
 };
 
-static void cbs_h266_free_sei(FFRefStructOpaque unused, void *content)
+static void cbs_h266_free_sei(AVRefStructOpaque unused, void *content)
 {
     H266RawSEI *sei = content;
     ff_cbs_sei_free_message_list(&sei->message_list);
@@ -2293,6 +2310,28 @@ static const SEIMessageTypeDescriptor cbs_sei_h266_types[] = {
     SEI_MESSAGE_TYPE_END
 };
 
+static const SEIMessageTypeDescriptor cbs_sei_h274_types[] = {
+    {
+        SEI_TYPE_FILM_GRAIN_CHARACTERISTICS,
+        1, 0,
+        sizeof(SEIRawFilmGrainCharacteristics),
+        SEI_MESSAGE_RW(sei, film_grain_characteristics),
+    },
+    {
+        SEI_TYPE_DISPLAY_ORIENTATION,
+        1, 0,
+        sizeof(SEIRawDisplayOrientation),
+        SEI_MESSAGE_RW(sei, display_orientation)
+    },
+    {
+        SEI_TYPE_FRAME_FIELD_INFO,
+        1, 0,
+        sizeof(SEIRawFrameFieldInformation),
+        SEI_MESSAGE_RW(sei, frame_field_information)
+    },
+    SEI_MESSAGE_TYPE_END,
+};
+
 const SEIMessageTypeDescriptor *ff_cbs_sei_find_type(CodedBitstreamContext *ctx,
                                                      int payload_type)
 {
@@ -2316,6 +2355,13 @@ const SEIMessageTypeDescriptor *ff_cbs_sei_find_type(CodedBitstreamContext *ctx,
     for (i = 0; codec_list[i].type >= 0; i++) {
         if (codec_list[i].type == payload_type)
             return &codec_list[i];
+    }
+
+    if (ctx->codec->codec_id == AV_CODEC_ID_H266) {
+        for (i = 0; cbs_sei_h274_types[i].type >= 0; i++) {
+            if (cbs_sei_h274_types[i].type == payload_type)
+                return &cbs_sei_h274_types[i];
+        }
     }
 
     for (i = 0; cbs_sei_common_types[i].type >= 0; i++) {

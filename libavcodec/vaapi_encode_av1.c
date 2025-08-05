@@ -637,7 +637,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
             slot = ((VAAPIEncodeAV1Picture*)ref_pic->codec_priv)->slot;
             av_assert0(vpic->reference_frames[slot] == VA_INVALID_SURFACE);
 
-            vpic->reference_frames[slot] = ((VAAPIEncodePicture *)ref_pic)->recon_surface;
+            vpic->reference_frames[slot] = ((VAAPIEncodePicture *)ref_pic->priv)->recon_surface;
         }
     }
 
@@ -1049,10 +1049,7 @@ const FFCodec ff_av1_vaapi_encoder = {
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
                       FF_CODEC_CAP_INIT_CLEANUP,
     .defaults       = vaapi_encode_av1_defaults,
-    .p.pix_fmts = (const enum AVPixelFormat[]) {
-        AV_PIX_FMT_VAAPI,
-        AV_PIX_FMT_NONE,
-    },
+    CODEC_PIXFMTS(AV_PIX_FMT_VAAPI),
     .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .hw_configs     = ff_vaapi_encode_hw_configs,
     .p.wrapper_name = "vaapi",

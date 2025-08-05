@@ -99,7 +99,7 @@ static int generate_fake_vps(QSVEncContext *q, AVCodecContext *avctx)
     }
     get_bits(&gb, 9);
 
-    ret = ff_hevc_parse_sps(&sps, &gb, &sps_id, 0, NULL, avctx);
+    ret = ff_hevc_parse_sps(&sps, &gb, &sps_id, 0, 0, NULL, avctx);
     av_freep(&sps_rbsp.rbsp_buffer);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error parsing the SPS\n");
@@ -396,17 +396,10 @@ const FFCodec ff_hevc_qsv_encoder = {
     FF_CODEC_ENCODE_CB(qsv_enc_frame),
     .close          = qsv_enc_close,
     .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_HYBRID,
-    .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
-                                                    AV_PIX_FMT_P010,
-                                                    AV_PIX_FMT_P012,
-                                                    AV_PIX_FMT_YUYV422,
-                                                    AV_PIX_FMT_Y210,
-                                                    AV_PIX_FMT_QSV,
-                                                    AV_PIX_FMT_BGRA,
-                                                    AV_PIX_FMT_X2RGB10,
-                                                    AV_PIX_FMT_VUYX,
-                                                    AV_PIX_FMT_XV30,
-                                                    AV_PIX_FMT_NONE },
+    CODEC_PIXFMTS(AV_PIX_FMT_NV12, AV_PIX_FMT_P010, AV_PIX_FMT_P012,
+                  AV_PIX_FMT_YUYV422, AV_PIX_FMT_Y210, AV_PIX_FMT_QSV,
+                  AV_PIX_FMT_BGRA, AV_PIX_FMT_X2RGB10, AV_PIX_FMT_VUYX,
+                  AV_PIX_FMT_XV30),
     .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .p.priv_class   = &class,
     .defaults       = qsv_enc_defaults,

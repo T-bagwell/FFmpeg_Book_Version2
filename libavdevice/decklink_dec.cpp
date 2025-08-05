@@ -1098,6 +1098,7 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
     }
     if (!ctx->draw_bars && ctx->signal_loss_action != SIGNAL_LOSS_NONE) {
         av_log(avctx, AV_LOG_ERROR, "options draw_bars and signal_loss_action are mutually exclusive\n");
+        av_freep(&ctx);
         return AVERROR(EINVAL);
     }
     ctx->audio_depth = cctx->audio_depth;
@@ -1113,7 +1114,8 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
             break;
         default:
             av_log(avctx, AV_LOG_ERROR, "Value of channels option must be one of 2, 8 or 16\n");
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto error;
     }
 
     /* Check audio bit depth option for valid values: 16 or 32 */
@@ -1123,18 +1125,20 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
             break;
         default:
             av_log(avctx, AV_LOG_ERROR, "Value for audio bit depth option must be either 16 or 32\n");
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto error;
     }
 
     /* List available devices. */
     if (ctx->list_devices) {
         ff_decklink_list_devices_legacy(avctx, 1, 0);
-        return AVERROR_EXIT;
+        ret = AVERROR_EXIT;
+        goto error;
     }
 
     ret = ff_decklink_init_device(avctx, avctx->url);
     if (ret < 0)
-        return ret;
+        goto error;
 
     /* Get input device. */
     if (ctx->dl->QueryInterface(IID_IDeckLinkInput, (void **) &ctx->dli) != S_OK) {
@@ -1335,6 +1339,7 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
 
 error:
     ff_decklink_cleanup(avctx);
+    av_freep(&cctx->ctx);
     return ret;
 }
 
